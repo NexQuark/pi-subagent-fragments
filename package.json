@@ -33,11 +33,17 @@
     "typebox": "*"
   },
   "files": [
-    "extensions/",
+    "extensions/subagent/*.ts",
+    "extensions/subagent/*.js",
+    "extensions/subagent/names.ts",
+    "extensions/subagent/browser/*.ts",
     "scripts/",
     "instructions.md",
     "README.md",
-    "package.json"
+    "CHANGELOG.md",
+    "UPSTREAM.md",
+    "specs/",
+    "LICENSE"
   ],
   "vstack": {
     "extensionManager": {
