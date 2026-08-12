@@ -2,11 +2,11 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Approved (round 1 review 2026-08-12: OQ 2–5 resolved, amendments A1–A6; implementation pending) |
+| **Status** | Implemented (PR 10-13, v0.3.0, 2026-08-12) |
 | **Target version** | `0.3.0` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack@faeb65af` (`pi-agents-tmux` 2.8.1) |
-| **PRs** | TBD — depends on § 7 Open Question 1 (blocker path A/B/C/D) |
+| **PRs** | 10 (write side) + 11 (hook side) + 12 (tool side) + 13 (docs) — merged 2026-08-12 |
 | **v2 reserved** | § 10 — cross-pane broadcast (pattern matching fan-out) deferred |
 
 ---
@@ -520,6 +520,7 @@ Intentionally empty. Reserved for v2 follow-ups to maintain stable chapter numbe
 | v1.0 | 2026-08-12 | sub-meta | Initial draft, derived from user Q1/Q2/Q3 answers on spec 003 design space. Targets `@nexquark/pi-subagent-fragments` 0.3.0. |
 | v1.1 | 2026-08-12 | sub-meta | **Q2 resolved**: implementation path = (E) `before_agent_start` hook + persistent state. § 1 Background gains "Key discovery" paragraph noting per-turn hook semantics. § 2.1 replaced with hook viability analysis from `extensions/index.d.ts` (`BeforeAgentStartEvent` / `BeforeAgentStartEventResult` types; `getSystemPrompt()` reader). § 3.3 hot-swap semantics redrawn with hook + state-file mechanism. § 4.4 implementation redrawn as concrete path E with write side (`/agents:inject` handler) and read side (hook handler). § 7 Open Question 1 marked RESOLVED with link to § 4.4. § 6 PRs now defined (PR 10–13). No upstream changes required.
 | v1.2 | 2026-08-12 | sub-meta | **Round 1 review** (`specs/_reviews/003-1.md`): OQ 2–5 resolved — OQ2 session-runtime-dir history; OQ3 `--append` composes from current effective prompt (`--append`/`--add` aliases in v1); OQ4 non-pane targets error; OQ5 `--cwd` resolution-root only. Amendments A1–A3 (mandatory: `ctx.sessionManager.getSessionName()` keying, alias semantics, shared `injectStatePathFor`) + A4–A6 (minor) applied to § 3.2/§ 3.3/§ 3.4/§ 4.4/§ 7/§ 12. Status → Approved. PR 10–13 scope unchanged.
+| v1.3 | 2026-08-12 | sub-meta | **Implemented** — PR 10–13 merged (suite 456/0/0/860/44), v0.3.0 released. PR 10 write side (composeInjection / parseInjectArgs / prompt-history / `/agents:inject`), PR 11 hook side (`before_agent_start` consume + history on-apply + F1/F2), PR 12 tool side (`subagent.inject` + runToolInject), F3 standalone-only guard, PR 13 docs. Archived to `specs/archive/003-prompt-inject.v1.md`. |
 
 ---
 

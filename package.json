@@ -1,6 +1,6 @@
 {
   "name": "@nexquark/pi-subagent-fragments",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pi extension: fragments-based systemPrompt composition for forked pi-agents-tmux agents. See specs/001-multi-prompt-injection.md.",
   "license": "MIT",
   "keywords": [
