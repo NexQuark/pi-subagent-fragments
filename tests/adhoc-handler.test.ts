@@ -87,13 +87,16 @@ function captureHandlers(): { handlers: RegisteredHandlers; pi: ExtensionAPI; me
 	return { handlers, pi, messages };
 }
 
-// Invoke a captured handler and return the content it sends via sendMessage.
+// Invoke a captured handler and return the LATEST content it sends via
+// sendMessage during THIS call (multi-invoke safe: each call appends to the
+// shared message log, so we only look at messages added after the snapshot).
 async function invoke(handler: RegisteredHandlers[keyof RegisteredHandlers] | undefined, args: string): Promise<string> {
 	expect(handler).toBeDefined();
-	const { messages } = lastCapture;
+	const { messages } = lastCapture!;
+	const before = messages.length;
 	await (handler as (a: string, c: ExtensionCommandContext) => Promise<void>)(args, ctx());
-	const sent = messages.find((m) => m.content && !m.content.startsWith("Error"));
-	return sent?.content ?? "";
+	const newOnes = messages.slice(before).filter((m) => m.content && !m.content.startsWith("Error"));
+	return newOnes[newOnes.length - 1]?.content ?? "";
 }
 
 // The most recent captureHandlers() result, used by invoke() to read sent messages.
@@ -203,5 +206,82 @@ describe("adhoc handler --new-pane stop-then-create (PR8-E7/F7)", () => {
 		expect(content).toContain("Started ad-hoc pane");
 		// A tmux split-window (pane create) must have been attempted.
 		expect(tmuxCalls.some((args) => args[0] === "split-window")).toBe(true);
+	});
+});
+
+// Stateful tmux mock: echoes pane ids back for paneExists, returns a fresh
+// pane id per split-window, and lets callers observe split/kill ordering.
+function installStatefulTmuxMock(): { tmuxCalls: Array<string[]>; splitCount: () => number } {
+	const tmuxCalls: Array<string[]> = [];
+	let panesCreated = 0;
+	setPaneExecCaptureForTests(async (command: string, args: string[]) => {
+		tmuxCalls.push(args);
+		if (command !== "tmux") return { code: 0, stdout: "", stderr: "" };
+		const [sub, ...rest] = args;
+		if (sub === "list-panes") {
+			// Skip paneContainingProcess so getPrimaryPaneId falls through.
+			return { code: 1, stdout: "", stderr: "" };
+		}
+		if (sub === "split-window") {
+			panesCreated++;
+			return { code: 0, stdout: `%${10 + panesCreated}0`, stderr: "" };
+		}
+		if (sub === "display-message") {
+			const tIdx = rest.indexOf("-t");
+			if (tIdx >= 0) {
+				const target = rest[tIdx + 1];
+				// paneExists: display-message -p -t <id> #{pane_id} must echo the id
+				// back (code 0 + stdout === paneId) for the pane to count as live.
+				if (rest.some((t) => t.includes("pane_id")) && target && !target.includes(":")) {
+					return { code: 0, stdout: target, stderr: "" };
+				}
+				return { code: 0, stdout: "", stderr: "" };
+			}
+			// No -t: getPrimaryPaneId fallback (primary pane) or session name.
+			if (rest.some((t) => t.includes("pane_id"))) return { code: 0, stdout: "%1", stderr: "" };
+			return { code: 0, stdout: "test-session", stderr: "" };
+		}
+		return { code: 0, stdout: "", stderr: "" };
+	});
+	return { tmuxCalls, splitCount: () => panesCreated };
+}
+
+describe("adhoc handler --new-pane with pre-existing pane (PR8-F8)", () => {
+	test("F8: --new-pane stops old pane then creates a fresh one", async () => {
+		process.env.TMUX = "/tmp/tmux-f8,12345,0";
+		const { tmuxCalls, splitCount } = installStatefulTmuxMock();
+		const { handlers } = captureHandlers();
+		// 1. Plain start → live pane.
+		const c1 = await invoke(handlers["agents:start"], "adhoc-f8");
+		expect(c1).toContain("Started ad-hoc pane");
+		expect(splitCount()).toBe(1);
+		// 2. --new-pane → stop the old pane, then create a fresh one.
+		const c2 = await invoke(handlers["agents:start"], "adhoc-f8 --new-pane");
+		expect(c2).toContain("Started ad-hoc pane");
+		expect(splitCount()).toBe(2);
+		// A kill-pane (stop old) must precede the second split-window (create new).
+		const killIdx = tmuxCalls.findIndex((a) => a[0] === "kill-pane");
+		const split2Idx = tmuxCalls.map((a) => a[0] === "split-window").lastIndexOf(true);
+		expect(killIdx).toBeGreaterThan(-1);
+		expect(killIdx).toBeLessThan(split2Idx);
+	});
+
+	test("F8 control: plain double-start reuses the live pane (no second split)", async () => {
+		process.env.TMUX = "/tmp/tmux-f8c,12345,0";
+		const { tmuxCalls, splitCount } = installStatefulTmuxMock();
+		const { handlers } = captureHandlers();
+		const c1 = await invoke(handlers["agents:start"], "adhoc-f8c");
+		expect(c1).toContain("Started ad-hoc pane");
+		expect(splitCount()).toBe(1);
+		// Plain second start must REUSE the live pane: no second split-window
+		// and no kill-pane. (On Linux the reuse path also verifies the pane's
+		// live cwd via a mocked #{pane_pid}; if that check can't be satisfied
+		// it emits a cwd-stale Error AFTER the reuse decision — but crucially
+		// NO new pane is created. F8's concern is the second-pane-split, which
+		// is what --new-pane vs plain start must differ on.)
+		const c2 = await invoke(handlers["agents:start"], "adhoc-f8c");
+		void c2;
+		expect(splitCount()).toBe(1);
+		expect(tmuxCalls.filter((a) => a[0] === "kill-pane").length).toBe(0);
 	});
 });
