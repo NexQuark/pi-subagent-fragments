@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { formatSize, getMarkdownTheme, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { discoverAgents, formatAgentList, type AgentConfig, type AgentScope } from "./agents.js";
+import { discoverAgents, formatAgentList, synthesizeAdhocAgent, computeNearestDiscoveredName, shouldAdhocFallbackToBg, type AgentConfig, type AgentScope } from "./agents.js";
 import { registerAgentsCommands } from "./agents-command.js";
 import {
 	activeDashboardItems,
@@ -1964,7 +1964,9 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const agentScope: AgentScope = params.agentScope ?? "project";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
-			const agents = discovery.agents;
+			// spec 002 §4.3 — Round 3 ad-hoc branch mutates agents
+			// (pushes the synthesized ad-hoc agent). Declared let.
+			let agents = discovery.agents;
 			const confirmProjectAgents = params.confirmProjectAgents ?? false;
 			const parentModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
 			const parentThinkingLevel = pi.getThinkingLevel();
@@ -1973,8 +1975,53 @@ export default function (pi: ExtensionAPI) {
 
 			const hasChain = (params.chain?.length ?? 0) > 0;
 			const hasTasks = (params.tasks?.length ?? 0) > 0;
-			const hasSingle = Boolean(params.agent && params.task);
+			// spec 002 round 2: hasSingle accepts taskFile in addition to task.
+			const hasSingle = Boolean(params.agent && (params.task ?? params.taskFile));
 			const modeCount = Number(hasChain) + Number(hasTasks) + Number(hasSingle);
+
+			// spec 002 §3.5 / §4.3 — Round 3 ad-hoc recognition branch.
+			// Triggers when the requested name is not in the discovered
+			// inventory. Round 3 / C1: tmux-availability fallback (warn +
+			// bg) lives in this branch only; discovered agents keep their
+			// own pane decision and are NOT affected. Round 3 / C3:
+			// compute nearestDiscoveredName (string distance ≤ 2) and
+			// pass it to the synthesizer via the typed
+			// input.nearestDiscoveredName field per R3-E3.
+			let adHocSynthesized: AgentConfig | undefined;
+			if (params.agent !== undefined && !agents.some((a) => a.name === params.agent)) {
+				if (hasSingle) {
+					// PR7-E1 / C1: tmux fallback forces pane: false so dispatch
+					// routes to runSingleAgent (bg) instead of throwing in
+					// ensurePersistentPane. The warn is a UX hint; the pane
+					// flip is the actual mitigation. Without this, the warn
+					// is misleading: dispatch still hits the tmux-required
+					// path despite the "pane disabled" message.
+					const tmuxAvailable = Boolean(process.env.TMUX);
+					const fallbackToBg = shouldAdhocFallbackToBg(tmuxAvailable, params.pane);
+					if (fallbackToBg) {
+						console.warn(`[pi-subagent-fragments] tmux not available; pane disabled, dispatching as bg.`);
+					}
+					const nearest = computeNearestDiscoveredName(params.agent, agents);
+					adHocSynthesized = await synthesizeAdhocAgent({
+						name: params.agent,
+						cwd: params.cwd ?? ctx.cwd,
+						systemPrompt: params.systemPrompt,
+						systemPromptFiles: params.systemPromptFiles,
+						pane: fallbackToBg ? false : (params.pane ?? true),
+						replace: params.replace,
+						model: params.model,
+						passthroughArgs: params.passthroughArgs,
+						nearestDiscoveredName: nearest,
+					});
+					agents = [...agents, adHocSynthesized];
+				} else if (hasChain || hasTasks) {
+					return {
+						content: [{ type: "text", text: `subagent: ad-hoc agents are only supported in single mode. Move "${params.agent}" into <scope>.pi/agents/${params.agent}.md or split the call into single dispatches.` }],
+						details: makeDetails(hasChain ? "chain" : "parallel")([]),
+						isError: true,
+					};
+				}
+			}
 
 			const makeDetails =
 				(mode: "single" | "parallel" | "chain") =>

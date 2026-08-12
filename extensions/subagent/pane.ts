@@ -6,6 +6,8 @@ import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { atomicWriteFile } from "./file-lock.js";
 import type { AgentConfig } from "./agents.js";
+import { applyC4aRetry } from "./agents.js";
+import { composeAgentPrompt } from "./prompt-compose.js";
 import { delay, paneSessionModeToRecordMode } from "./format.js";
 import { safeFileName, shellQuote } from "./names.js";
 import {
@@ -724,7 +726,11 @@ export async function writeLauncher(
 	const promptFile = path.join(promptsDir, `${safeName}.md`);
 	const launcherFile = path.join(launchersDir, `${safeName}.sh`);
 
-	await atomicWriteFile(promptFile, agent.systemPrompt);
+	await atomicWriteFile(promptFile, composeAgentPrompt({
+		body: agent.systemPrompt,
+		fragments: [],
+		mode: agent.systemPromptMode ?? "append",
+	}));
 
 	const args = ["--name", agent.name, "--session", sessionFile, "--append-system-prompt", promptFile];
 	const bridgeExtension = settingBoolean("forceSessionBridgeForPanes", true, cwd) ? resolveSessionBridgeExtension(cwd) : undefined;
@@ -733,6 +739,14 @@ export async function writeLauncher(
 	if (thinkingLevel && thinkingLevel !== "off") args.push("--thinking", thinkingLevel);
 	const selectedTools = selectedToolsForAgent(agent, cwd, ["complete_subagent"], activeTools);
 	if (selectedTools && selectedTools.length > 0) args.push("--tools", selectedTools.join(","));
+	// spec 002 §3.6 / §4.5 / round 3 D8: passthroughArgs from the
+	// synthesized AgentConfig reach the spawned pi argv, each wrapped
+	// with shellQuote so content is safely escaped (spec 001 §4.7 +
+	// R3-E9). Unfiltered but shell-escaped.
+	const passthrough = (agent as AgentConfig & { passthroughArgs?: string[] }).passthroughArgs;
+	if (passthrough && passthrough.length > 0) {
+		args.push(...passthrough);
+	}
 
 	const invocation = getPiInvocation(args);
 	const command = [invocation.command, ...invocation.args].map(shellQuote).join(" ");
@@ -765,6 +779,42 @@ exec ${command}
 	return { sessionFile, promptFile, launcherFile };
 }
 
+/**
+ * spec 002 §4.5 / C4b — pure helper that builds the `tmux
+ * split-window` argument array. Extracted for testability (PR 8
+ * cycle 2 C4b family). When `paneDirection` / `paneSize` /
+ * `paneTarget` are provided, they override the auto-computed
+ * defaults derived from the layout group.
+ */
+export interface BuildTmuxSplitArgsInput {
+	splitHorizontally: boolean;
+	splitPercent: string;
+	splitTarget: string;
+	cwd: string;
+	launcherFile: string;
+	paneDirection?: "h" | "v";
+	paneSize?: { value: number; unit: "%" | "l" };
+	paneTarget?: string;
+}
+
+export function buildTmuxSplitArgs(input: BuildTmuxSplitArgsInput): string[] {
+	const directionLetter = input.paneDirection ?? (input.splitHorizontally ? "h" : "v");
+	const direction = `-${directionLetter}`;
+	const target = input.paneTarget ?? input.splitTarget;
+	const args = ["split-window", direction, "-d", "-P", "-F", "#{pane_id}"];
+	if (input.paneSize) {
+		if (input.paneSize.unit === "%") {
+			args.push("-p", String(input.paneSize.value));
+		} else {
+			args.push("-l", String(input.paneSize.value));
+		}
+	} else {
+		args.push("-p", input.splitPercent);
+	}
+	args.push("-t", target, "-c", input.cwd, "bash", input.launcherFile);
+	return args;
+}
+
 export async function ensurePersistentPane(
 	runtimeRoot: string,
 	parentSessionId: string,
@@ -773,6 +823,9 @@ export async function ensurePersistentPane(
 	parentModel: string | undefined,
 	parentThinkingLevel: string | undefined,
 	activeTools?: string[],
+	paneDirection?: "h" | "v",
+	paneSize?: { value: number; unit: "%" | "l" },
+	paneTarget?: string,
 ): Promise<PaneRegistryEntry> {
 	await ensureTmux();
 
@@ -803,22 +856,26 @@ export async function ensurePersistentPane(
 		const splitHorizontally = groupEntries.length === 0;
 		const splitTarget = splitHorizontally ? primaryPaneId : groupEntries[0].paneId;
 		const splitPercent = splitHorizontally ? "50" : String(Math.max(10, Math.floor(100 / (groupEntries.length + 1))));
-		const result = await tmux([
-			"split-window",
-			splitHorizontally ? "-h" : "-v",
-			"-d",
-			"-P",
-			"-F",
-			"#{pane_id}",
-			"-p",
+		const tmuxArgs = buildTmuxSplitArgs({
+			splitHorizontally,
 			splitPercent,
-			"-t",
 			splitTarget,
-			"-c",
 			cwd,
-			"bash",
-			paths.launcherFile,
-		]);
+			launcherFile: paths.launcherFile,
+			paneDirection,
+			paneSize,
+			paneTarget,
+		});
+		let result = await tmux(tmuxArgs);
+		// spec 002 §4.5 / C4a: tmux rejects the split when percent is
+		// missing/invalid (compute percent can be < 10 in dense layout
+		// groups, or a tmux version mismatch emits "size missing").
+		// Retry without -p so tmux picks its default split; this is
+		// a fallback path, not the primary flow. applyC4aRetry
+		// removes both -p and its value token.
+		if (result.code !== 0 && result.stderr.includes("size missing")) {
+			result = await tmux(applyC4aRetry(tmuxArgs));
+		}
 		if (result.code !== 0) throw new Error(`Failed to launch tmux pane for ${agent.name}: ${result.stderr || result.stdout}`.trim());
 		const paneId = result.stdout.trim();
 		await tmux(["select-pane", "-t", paneId, "-T", windowName]);
@@ -908,6 +965,9 @@ export async function queuePersistentPaneTask(
 	parentThinkingLevel: string | undefined,
 	pi: ExtensionAPI,
 	activeTools?: string[],
+	paneDirection?: "h" | "v",
+	paneSize?: { value: number; unit: "%" | "l" },
+	paneTarget?: string,
 ): Promise<QueuedPaneTask> {
 	const effectiveCwd = cwd ?? defaultCwd;
 	const existingRegistry = await readPaneRegistry(runtimeRoot);
@@ -918,7 +978,7 @@ export async function queuePersistentPaneTask(
 		.find((record) => normalizedTaskForDedup(record.task) === normalizedTaskForDedup(task));
 	const ensureReusablePane = async () => {
 		try {
-			return await ensurePersistentPane(runtimeRoot, parentSessionId, effectiveCwd, agent, parentModel, parentThinkingLevel, activeTools);
+			return await ensurePersistentPane(runtimeRoot, parentSessionId, effectiveCwd, agent, parentModel, parentThinkingLevel, activeTools, paneDirection, paneSize, paneTarget);
 		} catch (error) {
 			if (error instanceof PaneCwdStaleError && liveExisting) emitPaneCwdStale(pi, runtimeRoot, task, liveExisting, error.details, error.message);
 			throw error;
@@ -1119,6 +1179,9 @@ export async function runPersistentPaneAgent(
 	forceSpawn = false,
 	resumeSession?: string,
 	onAgentStopped?: (agentName: string) => void,
+	paneDirection?: "h" | "v",
+	paneSize?: { value: number; unit: "%" | "l" },
+	paneTarget?: string,
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 	if (!agent) {
@@ -1192,7 +1255,7 @@ export async function runPersistentPaneAgent(
 
 	let queued: QueuedPaneTask;
 	try {
-		queued = await queuePersistentPaneTask(runtimeRoot, parentSessionId, defaultCwd, agent, task, cwd, parentModel, parentThinkingLevel, pi, pi.getActiveTools());
+		queued = await queuePersistentPaneTask(runtimeRoot, parentSessionId, defaultCwd, agent, task, cwd, parentModel, parentThinkingLevel, pi, pi.getActiveTools(), paneDirection, paneSize, paneTarget);
 	} catch (error) {
 		if (!(error instanceof PaneCwdStaleError)) throw error;
 		const stderr = error.message;

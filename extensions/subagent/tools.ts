@@ -29,7 +29,56 @@ export const SubagentParams = Type.Object({
 	confirmProjectAgents: Type.Optional(
 		Type.Boolean({ description: "Prompt before running project-local agents. Default: false.", default: false }),
 	),
-	cwd: Type.Optional(Type.String({ description: "Working directory for the agent process (single mode)" })),
+	// spec 002 §4.1 — round 2 + round 3 ad-hoc dispatch fields:
+	pane: Type.Optional(
+		Type.Boolean({
+			description:
+				"Override pane-vs-bg for this dispatch. Ad-hoc defaults to true (pane); discovered agents keep their frontmatter pane flag when omitted. See § 4.4 for the strict-precedence resolution.",
+		}),
+	),
+	systemPrompt: Type.Optional(
+		Type.String({
+			description:
+				"Inline system prompt body joined with systemPromptFiles at spawn time. Mutually independent of agent frontmatter; ignored when the name resolves to a discovered agent.",
+		}),
+	),
+	systemPromptFiles: Type.Optional(
+		Type.Array(Type.String(), {
+			description:
+				"Paths to markdown files whose contents are joined with systemPrompt via composeAgentPrompt (spec 001 semantics). Paths resolve relative to the calling session's cwd. Ignored when the name resolves to a discovered agent.",
+		}),
+	),
+	taskFile: Type.Optional(
+		Type.String({
+			description:
+				"Path to a file whose contents become the task. Overrides `task` when both are provided. Resolves relative to the calling session's cwd.",
+		}),
+	),
+	cwd: Type.Optional(
+		Type.String({
+			description:
+				"Override the cwd for fragment resolution and pane spawn. Absolute path; used both as the base for `path.resolve` when reading fragments and as the pane's cwd for `tmux split-window -c`. Default: ctx.cwd.",
+		}),
+	),
+	// Round 3 additions:
+	model: Type.Optional(
+		Type.String({
+			description:
+				"Override agent.model at call time. Same shape as the frontmatter `model` field. Falls through to the parent session's model if omitted.",
+		}),
+	),
+	replace: Type.Optional(
+		Type.Boolean({
+			description:
+				"Compose-mode override for ad-hoc dispatch. true → composeAgentPrompt with mode: 'replace' (last non-empty fragment becomes canonical, earlier fragments dropped). false / omitted → mode: 'append' (default).",
+		}),
+	),
+	passthroughArgs: Type.Optional(
+		Type.Array(Type.String(), {
+			description:
+				"Unrecognized --flag values forwarded verbatim to the spawned pi argv. The launcher script appends these after the recognized flags. Used for pi options not yet first-classed in the dispatcher.",
+		}),
+	),
 	sessionKey: Type.Optional(
 		Type.String({
 			description:
