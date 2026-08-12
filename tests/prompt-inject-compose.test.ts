@@ -103,6 +103,12 @@ describe("parseInjectArgs (spec 003 §3.1 + OQ5/A1)", () => {
 		expect(() => parseInjectArgs("x --replace --rollback", "/tmp")).toThrow(/mutually exclusive/);
 	});
 
+	// PR 11 F1: rollback N must be >= 1 (explicit guard, not the
+	// ambiguous "no prior versions" path).
+	test("F1: --rollback 0 / negative N → explicit error (N must be >= 1)", () => {
+		expect(() => parseInjectArgs("x --rollback 0", "/tmp")).toThrow(/N must be >= 1/);
+	});
+
 	test("#<file> resolves as file source (must exist)", () => {
 		const root = tempDir("parse");
 		writeFileSync(join(root, "sys.md"), "system-body", "utf8");

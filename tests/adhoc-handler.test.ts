@@ -29,6 +29,7 @@ import { setPaneExecCaptureForTests } from "../extensions/subagent/pane.js";
 import { runtimeSessionId, sessionRuntimeDir } from "../extensions/subagent/settings.js";
 import { registryPath } from "../extensions/subagent/paths.js";
 import { injectStatePathFor } from "../extensions/subagent/prompt-inject.js";
+import { promptHistoryPathFor } from "../extensions/subagent/prompt-history.js";
 
 const tmpDirs: string[] = [];
 let userDir: string;
@@ -359,20 +360,22 @@ describe("adhoc handler inject (spec 003 PR 10)", () => {
 		expect(existsSync(stateFile)).toBe(true);
 		const state = JSON.parse(readFileSync(stateFile, "utf8"));
 		expect(state.mode).toBe("replace");
-		expect(state.effective).toBe("new prompt");
+		// PR 11: write side stores fragments; compose happens at hook apply.
+		expect(state.fragments).toEqual(["new prompt"]);
 		expect(warns.some((w) => w.includes("inject: injectTgt mode=replace"))).toBe(true);
 	});
 
-	test("--append composes current + new into state (OQ3/A2)", async () => {
+	test("--append writes fragments; compose deferred to hook (OQ3/A2/F2)", async () => {
 		process.env.TMUX = "/tmp/tmux-ij,12345,0";
 		seedLivePane("injectApp");
 		mockLiveTmux();
 		const { handlers } = captureHandlers();
-		// No discovered config for injectApp → current undefined → append = new only.
+		// Write side stores only the injected fragments; the hook composes
+		// against the real event.systemPrompt (reviewer F2).
 		await invoke(handlers["agents:inject"], 'injectApp --append "part"');
 		const state = JSON.parse(readFileSync(injectStatePathFor(handlerRuntimeRoot(), "injectApp"), "utf8"));
 		expect(state.mode).toBe("append");
-		expect(state.effective).toBe("part");
+		expect(state.fragments).toEqual(["part"]);
 	});
 
 	test("--replace on a non-live agent → error (OQ4)", async () => {
@@ -392,5 +395,53 @@ describe("adhoc handler inject (spec 003 PR 10)", () => {
 		const { handlers } = captureHandlers();
 		const raw = await invokeRaw(handlers["agents:inject"], "ghost --rollback");
 		expect(raw).toContain("inject: no prior versions to roll back to");
+	});
+
+	// PR 11 F1: --rollback 0 must be rejected explicitly (not fall through
+	// to the ambiguous "no prior versions" path).
+	test("F1: --rollback 0 on live agent → explicit error (N must be >= 1)", async () => {
+		process.env.TMUX = "/tmp/tmux-ij,12345,0";
+		seedLivePane("injectF1");
+		mockLiveTmux();
+		const { handlers } = captureHandlers();
+		const raw = await invokeRaw(handlers["agents:inject"], "injectF1 --rollback 0");
+		expect(raw).toContain("inject: --rollback N must be >= 1");
+	});
+
+	// PR 11 test (b): after one applied mutation, --history lists 1 row and
+	// --rollback 1 writes the restored prior prompt to state.
+	function seedHistory(agent: string, entries: Array<{ prev: string; new: string; mode: string }>): void {
+		const file = promptHistoryPathFor(handlerRuntimeRoot(), agent);
+		mkdirSync(join(handlerRuntimeRoot(), "prompt-history"), { recursive: true });
+		writeFileSync(
+			file,
+			JSON.stringify(entries.map((e, i) => ({ ...e, timestamp: `2026-08-12T00:00:0${i}Z`, source: null })), null, 2),
+			"utf8",
+		);
+	}
+
+	test("--history lists applied versions (1 row after one apply)", async () => {
+		process.env.TMUX = "/tmp/tmux-ij,12345,0";
+		seedLivePane("injectHist");
+		mockLiveTmux();
+		seedHistory("injectHist", [{ prev: "BASE", new: "BASE\n\nX", mode: "append" }]);
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:inject"], "injectHist --history");
+		expect(content).toContain("Prompt history for injectHist");
+		expect(content).toContain("append");
+		expect(content).toContain("| 1 |");
+	});
+
+	test("--rollback 1 restores prior prompt to state (test b)", async () => {
+		process.env.TMUX = "/tmp/tmux-ij,12345,0";
+		seedLivePane("injectRoll");
+		mockLiveTmux();
+		seedHistory("injectRoll", [{ prev: "BASE", new: "BASE\n\nX", mode: "append" }]);
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:inject"], "injectRoll --rollback 1");
+		expect(content).toContain("Rolled back injectRoll");
+		const state = JSON.parse(readFileSync(injectStatePathFor(handlerRuntimeRoot(), "injectRoll"), "utf8"));
+		expect(state.mode).toBe("rollback");
+		expect(state.fragments).toEqual(["BASE"]);
 	});
 });
