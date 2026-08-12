@@ -8,7 +8,8 @@ PRs.
 
 | ID  | Title                                  | Status     | Implementation |
 |-----|----------------------------------------|------------|----------------|
-| 001 | Multi-prompt fragment injection (static, spawn-time) | Draft → Implementation | `feature/fragments` |
+| 001 | Multi-prompt fragment injection (static, spawn-time) | Implemented | `feature/fragments` (v0.1.0) |
+| 002 | Ad-hoc pane agent launch + call-time prompt assembly | Implemented | PR 6-9 (v0.2.0) — archived |
 
 ## Status legend
 
