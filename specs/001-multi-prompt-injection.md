@@ -524,3 +524,109 @@ expansion with cycle detection).
 |---------|------------|--------|---------|
 | v1.0    | 2026-08-12 | NexQuark | Initial draft, targeted at pi-subagents (since superseded). |
 | v1.1    | 2026-08-12 | NexQuark | Retargeted to `@nexquark/pi-subagent-fragments` fork of `pi-agents-tmux`. Lines, file paths, and agent-discovery mechanics updated for the upstream codebase. Removed runtime-switching implementation (§ 9 in v1.0 → § 11 deferred in v1.1). PR plan reduced from 10 to 5 PRs (static-only). |
+| v1.2    | 2026-08-12 | NexQuark | Added § 13 "Known Limitations (v1)" after E2E + smoke-test verification surfaced an upstream-inherited constraint (flat agent directory layout). Documented to spare users from re-discovering it. |
+---
+
+## 13. Known Limitations (v1)
+
+Documented constraints that v1 inherits or accepts. **None of these
+block v1 shipping** — each is a known boundary with a workaround.
+Future spec revisions may lift some of these into v2 work.
+
+### 13.1 Fragment files must live in the agent's flat directory
+
+**Constraint**: `loadAgentsFromDir` in
+`extensions/subagent/agents.ts` (inherited from upstream
+`pi-agents-tmux`) reads `.md` files at the **top level** of the agent
+scope only. It does **not** recurse into subdirectories.
+
+**Implication**: An agent file at `<scope>/subdir/agent-alpha.md`
+is **invisible** to agent discovery. Therefore fragment paths cannot
+be resolved through such a subdirectory either, because the agent
+itself cannot be found.
+
+**Workaround** (current practice, see `e2e/fixtures/` and `smoke/`):
+
+- Place the agent `.md` file at the **top level** of the agent scope
+  (`~/.pi/agent/agents/agent-alpha.md` for user scope,
+  `<project>/.pi/agents/agent-alpha.md` for project scope).
+- Place fragment files in the **same directory** as the agent file
+  (`~/.pi/agent/agents/fragment-alpha-role.md`).
+- Reference fragments with paths relative to the agent file:
+  `systemPromptFragments: ["./fragment-alpha-role.md"]`.
+
+**Why we do NOT fix this in v1**: making `loadAgentsFromDir` recurse
+would change upstream behavior shared with all other agents (not just
+fragments-aware ones) and risks breaking unrelated agents that happen
+to stash notes in subdirectories. The right venue for this change is
+upstream `pi-agents-tmux` itself, ideally via a config flag, not the
+fork.
+
+**Tracking**: Captured for v2 consideration; lifting it would require
+an upstream-PR or a fork-only switch, both of which are out-of-scope
+for v1.
+
+### 13.2 `mode: "append"` and `mode: "replace"` produce identical output
+
+**Constraint**: Per spec § 3.2 and § 4.5, both modes yield the same
+joined prompt in v1. The `mode` field is captured on `AgentConfig`
+for forward compatibility but does not influence runtime composition.
+
+**Implication**: Users may expect `replace` to mean "discard body,
+keep only fragments", and v1 does not do that. Spec § 7 item 1
+already calls this out; users reading only the frontmatter may not.
+
+**Workaround**: Treat both modes as identical in v1. Document the
+behavior in agent READMEs.
+
+**Why we do NOT fix this in v1**: § 11.1 defers mode semantics
+differentiation to v2, where it becomes part of the runtime prompt
+state model. Implementing it in v1 would require the v2 state model
+without its driving feature (runtime switching), producing dead code.
+
+### 13.3 No path-containment sandbox for fragment paths
+
+**Constraint**: § 3.5 and § 7 item 3 note that `path.resolve` permits
+`../` escapes. A fragment path like `../../../etc/foo` will resolve
+and read outside the agent scope.
+
+**Implication**: A malicious or careless agent definition could read
+arbitrary files into the composed systemPrompt.
+
+**Workaround** (current practice): trust the agent author. This is the
+same trust level upstream operates at — agent `.md` files are already
+fully trusted code.
+
+**Why we do NOT fix this in v1**: § 11.2 defers path containment
+hardening to v2 with an opt-out escape hatch.
+
+### 13.4 Synchronous fragment reads block agent discovery
+
+**Constraint**: `loadFragmentStrings` uses `fs.readFileSync`. An agent
+declaring 50 fragments across 50 files pays 50 sequential file reads
+before the agent becomes visible.
+
+**Implication**: Slow agent discovery when agents declare many fragments.
+
+**Workaround**: Keep fragment counts small in v1 (typical agents: < 5
+fragments per spec § 7 item 2).
+
+**Why we do NOT fix this in v1**: § 11.3 defers async I/O to v2 once a
+real-world need exceeds the threshold.
+
+### 13.5 Fragments are joined raw; frontmatter inside fragments is preserved verbatim
+
+**Constraint**: Fragment files are read as raw markdown. Their
+frontmatter (if any) is included literally in the composed prompt.
+
+**Implication**: A fragment file with `---\nname: foo\n---\nbody` will
+appear as that exact text inside the composed systemPrompt, not as
+parsed frontmatter.
+
+**Workaround**: Keep fragments as pure markdown bodies without
+frontmatter. If you want metadata about a fragment, name the file
+descriptively (e.g., `fragment-role-v2.md`).
+
+**Why this is the right choice**: Recursive parsing adds complexity
+without clear user benefit; raw-join keeps the join rule trivial and
+predictable (see § 3.2).

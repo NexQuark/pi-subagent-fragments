@@ -57,6 +57,35 @@ npm uninstall -g @nexquark/pi-subagent-fragments
 For local development from this repo (no `npm publish` round-trip
 required), use `pi install --path .` from the repo root.
 
+## Known limitations (v1)
+
+Inherited from upstream `pi-agents-tmux`'s `loadAgentsFromDir`, which reads
+`.md` files at the **top level** of the agent scope only — it does not
+recurse into subdirectories. Practically:
+
+- Place the agent `.md` file at the top level of the agent scope
+  (`~/.pi/agent/agents/agent-alpha.md` for user scope,
+  `<project>/.pi/agents/agent-alpha.md` for project scope).
+- Place fragment files in the **same directory** as the agent file, and
+  reference them with paths relative to it:
+
+  ```markdown
+  ---
+  name: agent-alpha
+  systemPromptFragments: ["./fragment-alpha-role.md"]
+  ---
+
+  You are agent-alpha.
+  ```
+
+- `mode: "append"` and `mode: "replace"` produce identical output in v1.
+  The `mode` field is captured for v2 runtime-switching semantics; the v2
+  spec will differentiate.
+
+See
+[specs/001-multi-prompt-injection.md § 13](./specs/001-multi-prompt-injection.md#13-known-limitations-v1)
+for the full list (path sandbox, async I/O, raw-join, etc.).
+
 ## License
 
 MIT — same as upstream. See [`LICENSE`](./LICENSE) for the fork attribution
