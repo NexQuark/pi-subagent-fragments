@@ -70,6 +70,16 @@ Plus, `ExtensionContextActions.getSystemPrompt(): string` lets handlers read the
 
 **Conclusion**: the upstream pi runtime does not have a "frozen after startup" limitation for system-prompt mutation — it has a hook that fires per turn with mutation capability. spec 003's blocker (Q2) is solved without upstream changes. Implementation path (E) (see § 4.4) is the chosen path.
 
+**Child-process viability (round 1 review § 1b, 2026-08-12)**: the hook
+fires in the **child pane-agent pi process**, not just the caller. The
+extension demonstrably runs in child processes — `complete_subagent` reads
+`childAgentName` and only works inside a persistent pane (`index.ts:1219-1247`),
+and an existing `before_agent_start` handler already runs child-side
+(`index.ts:1764`). Multi-handler chaining is supported (pi
+`loader.js:209-213` accumulates handlers; `runner.js:847-872` runs all and
+chains `currentSystemPrompt`; handlers returning `undefined` don't interfere),
+so the new inject hook chains cleanly beside the existing agent-list handler.
+
 For comparison, the older `--append-system-prompt <file>` CLI flag (`extensions/subagent/runner.ts:631-636`, `extensions/subagent/pane.ts:555-560`) is read once at subprocess spawn time and seeds the initial system prompt. The hook then takes over for subsequent mutations.
 
 ### 2.2 Existing injection surfaces (for context, not used by spec 003)
@@ -458,7 +468,7 @@ Path E is the chosen implementation (§ 4.4); PRs are defined below.
 | PR | Scope | Test file |
 |---|---|---|
 | PR 10 | `composeInjection` + history module (`extensions/subagent/prompt-history.ts`) + slash parser (`parseInjectArgs`) + `/agents:inject` handler wiring | `tests/prompt-inject-compose.test.ts` |
-| PR 11 | `before_agent_start` hook handler + state file read/consume + integration with `runSingleDispatch` for ad-hoc injection path | `tests/prompt-inject-dispatch.test.ts` |
+| PR 11 | `before_agent_start` hook handler + state file read/consume + integration with `runSingleDispatch` for ad-hoc injection path. **Includes reviewer-mandated child-session hook-consumption red test** (round 1 review § 8): prove the hook fires in a child pane session and consumes the state file one-shot; assert a 2nd turn does NOT re-inject after unlink. | `tests/prompt-inject-dispatch.test.ts` |
 | PR 12 | `subagent` tool surface (`inject` param) + subagent-side integration tests (verify state file written + read on next turn) | `tests/prompt-inject-tool.test.ts` |
 | PR 13 | docs (README + CHANGELOG) | n/a |
 
