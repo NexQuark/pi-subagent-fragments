@@ -9,6 +9,8 @@ import { runSingleAgent } from "./runner.js";
 import { formatTraceView, recordTraceRef, resolveTraceRecord } from "./renderers.js";
 import { pollPaneCompletions, readPaneRegistry, readTaskRegistry, emitSubagentEvent } from "./tasks.js";
 import { runtimeSessionId, sessionRuntimeDir } from "./settings.js";
+import { composeInjection, writeInjectionState } from "./prompt-inject.js";
+import { PromptHistory, promptHistoryPathFor } from "./prompt-history.js";
 import type { SingleResult, SubagentDashboardItem, SubagentDetails } from "./types.js";
 
 type AgentCommandCompletion = { value: string; label: string; description?: string; pane?: boolean };
@@ -155,6 +157,57 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 					}
 					await persistRuntimeSnapshot(ctx, runtimeRoot);
 				}
+			} else if (command === "inject") {
+				const parsed = parseInjectArgs(parts.slice(1).join(" "), ctx.cwd);
+				const name = parsed.name;
+				const registry = await readPaneRegistry(runtimeRoot);
+				const entry = registry[name];
+				const live = Boolean(entry && (await paneExists(entry.paneId)));
+
+				if (parsed.mode === "history") {
+					const hist = new PromptHistory(promptHistoryPathFor(runtimeRoot, name));
+					const versions = hist.list();
+					const lines = versions.length === 0
+						? ["No prompt history for " + name + "."]
+						: ["| # | mode | bytes | timestamp |", "|---|---|---|---|",
+							...versions.map((v, i) => `| ${versions.length - i} | ${v.mode} | ${Buffer.byteLength(v.new, "utf-8")} | ${v.timestamp} |`)];
+					content = `# Prompt history for ${name}\n\n` + lines.join("\n");
+					messageDetails = { action: "inject", mode: "history", agent: name };
+				} else if (parsed.mode === "rollback") {
+					const hist = new PromptHistory(promptHistoryPathFor(runtimeRoot, name));
+					const target = hist.get(parsed.rollback);
+					if (!target) throw new Error(`inject: no prior versions to roll back to`);
+					await writeInjectionState(runtimeRoot, name, { mode: "rollback", effective: target.prev });
+					const bytes = Buffer.byteLength(target.prev, "utf-8");
+					const hlen = hist.list().length;
+					console.warn(`[pi-subagent-fragments] inject: ${name} mode=rollback bytes=${bytes} history=${hlen}`);
+					content = `Rolled back ${name} to version ${parsed.rollback} (bytes=${bytes}).`;
+					messageDetails = { action: "inject", mode: "rollback", agent: name, rollback: parsed.rollback };
+				} else {
+					// replace / append / add are MUTATIONS: they need a live pane
+					// session to inject into (OQ4). history/rollback above do not.
+					if (!live) {
+						throw new Error(`inject: ${name || "(missing)"} has no live pane session to inject into`);
+					}
+					// compose from current + sources, write state. `current` = the
+					// target's launch system prompt (discovered config) as the
+					// recorded effective base; the hook refines with the real
+					// event.systemPrompt in PR 11.
+					const agentConfig = findAgent(name);
+					const current = agentConfig?.systemPrompt ?? undefined;
+					const composed = composeInjection({
+						mode: parsed.mode,
+						sources: parsed.sources,
+						current,
+					});
+					await writeInjectionState(runtimeRoot, name, { mode: parsed.mode, effective: composed.effective });
+					const hist = new PromptHistory(promptHistoryPathFor(runtimeRoot, name));
+					const hlen = hist.list().length;
+					console.warn(`[pi-subagent-fragments] inject: ${name} mode=${parsed.mode} bytes=${composed.bytes} history=${hlen}`);
+					content = `Injected into ${name}. mode=${parsed.mode} bytes=${composed.bytes} history=${hlen}`;
+					messageDetails = { action: "inject", mode: parsed.mode, agent: name, bytes: composed.bytes, history: hlen };
+				}
+				await persistRuntimeSnapshot(ctx, runtimeRoot);
 			} else if (command === "send") {
 				const agent = findAgent(parts[1]);
 				if (!agent) throw new Error(`Unknown agent: ${parts[1] ?? "(missing)"}`);
@@ -342,6 +395,12 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 		handler: async (args, ctx) => agentsHandler(`trace ${args}`.trim(), ctx),
 	});
 
+	pi.registerCommand("agents:inject", {
+		description: "Inject a system prompt into a live agent: /agents:inject <name> [--replace|--append|--add] [<sources>...] [--rollback [N]] [--history]",
+		getArgumentCompletions: paneAgentNameCompletions("inject"),
+		handler: async (args, ctx) => agentsHandler(`inject ${args}`.trim(), ctx),
+	});
+
 }
 
 // spec 002 §3.6 — R2 grammar parser for `/agents:new` and `/agents:start`.
@@ -357,6 +416,15 @@ export type AdhocSystemSource =
 export type AdhocUserSource =
 	| { type: "file"; path: string; content: string }
 	| { type: "inline"; value: string };
+
+export interface InjectParsedArgs {
+	name: string;
+	mode: "replace" | "append" | "add" | "rollback" | "history";
+	sources: AdhocSystemSource[];
+	rollback: number;
+	cwd?: string;
+	passthroughArgs: string[];
+}
 
 export interface AdhocParsedArgs {
 	name: string;
@@ -592,6 +660,129 @@ export function parseAdhocArgs(args: string, cwd: string): AdhocParsedArgs {
 		// passthrough. Covers the rare case of stray tokens reaching
 		// the parser.
 		parsed.passthroughArgs.push(token);
+	}
+
+	return parsed;
+}
+
+/**
+ * spec 003 §3.1 — /agents:inject R2 grammar parser.
+ *
+ * /agents:inject <name> [--replace | --append | --add] [<system-source>...]
+ *   [--rollback [N]] [--history] [--cwd <path>] [-- <passthrough>]
+ *
+ * Exactly ONE of the five mode selectors (--replace/--append/--add/
+ * --rollback/--history) is allowed; conflict → error (spec §3.1 mutually
+ * exclusive rule). System sources are `#<path>` (must-exist file),
+ * `#"..."` (file-or-inline), or a bare inline string. `--cwd` sets the
+ * source-resolution root only (OQ5); it never relocates a running agent.
+ */
+export function parseInjectArgs(args: string, cwd: string): InjectParsedArgs {
+	const tokens = tokenizeArgs(args.trim());
+	const parsed: InjectParsedArgs = {
+		name: "",
+		mode: "append",
+		sources: [],
+		rollback: 1,
+		cwd: undefined,
+		passthroughArgs: [],
+	};
+
+	let modeSet: InjectParsedArgs["mode"] | undefined;
+	const setMode = (m: InjectParsedArgs["mode"]) => {
+		if (modeSet && modeSet !== m) {
+			throw new Error("inject: --replace / --append / --add / --rollback / --history are mutually exclusive");
+		}
+		modeSet = m;
+		parsed.mode = m;
+	};
+
+	// First positional token is the name.
+	let i = 0;
+	if (i < tokens.length && !tokens[i]!.startsWith("--")) {
+		parsed.name = tokens[i]!;
+		i++;
+	}
+
+	for (; i < tokens.length; i++) {
+		const token = tokens[i]!;
+
+		// `--` separator: everything from here goes to passthroughArgs verbatim.
+		if (token === "--") {
+			parsed.passthroughArgs.push(...tokens.slice(i + 1));
+			break;
+		}
+
+		// Mode selectors (mutually exclusive).
+		if (token === "--replace") {
+			setMode("replace");
+			continue;
+		}
+		if (token === "--append") {
+			setMode("append");
+			continue;
+		}
+		if (token === "--add") {
+			setMode("add");
+			continue;
+		}
+		if (token === "--history") {
+			setMode("history");
+			continue;
+		}
+
+		// --rollback [N]
+		if (token === "--rollback") {
+			setMode("rollback");
+			const next = i + 1 < tokens.length ? tokens[i + 1]! : "";
+			if (/^\d+$/.test(next)) {
+				parsed.rollback = parseInt(next, 10);
+				i++;
+			}
+			continue;
+		}
+
+		// --cwd <path> (source-resolution root only; OQ5).
+		if (token === "--cwd") {
+			const value = i + 1 < tokens.length ? tokens[i + 1]! : "";
+			parsed.cwd = value;
+			i++;
+			continue;
+		}
+
+		// Unknown --flag → passthrough.
+		if (token.startsWith("--")) {
+			parsed.passthroughArgs.push(token);
+			if (i + 1 < tokens.length) {
+				const next = tokens[i + 1]!;
+				if (!next.startsWith("--") && !next.startsWith("#") && !next.startsWith("@") && !isQuotedToken(next)) {
+					parsed.passthroughArgs.push(next);
+					i++;
+				}
+			}
+			continue;
+		}
+
+		// System source: #<unquoted> or #"<quoted>". Resolution root is
+		// --cwd when given (OQ5: source-resolution root only), else the
+		// caller cwd.
+		if (token.startsWith("#")) {
+			const root = parsed.cwd ?? cwd;
+			const value = stripQuotes(token.slice(1));
+			if (token.startsWith('#"')) {
+				const file = tryResolveAsFile(value, root);
+				if (file) parsed.sources.push(file);
+				else parsed.sources.push({ type: "inline", value });
+			} else {
+				const file = tryResolveAsFile(value, root);
+				if (!file) throw new Error(`inject: system source "${value}" must be a regular file (resolved relative to cwd "${root}").`);
+				parsed.sources.push(file);
+			}
+			continue;
+		}
+
+		// Bare inline string → system source.
+		parsed.sources.push({ type: "inline", value: stripQuotes(token) });
 	}
 
 	return parsed;

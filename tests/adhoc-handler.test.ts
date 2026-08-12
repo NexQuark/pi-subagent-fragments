@@ -19,13 +19,16 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionCommandContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerAgentsCommands } from "../extensions/subagent/agents-command.js";
 import { setSingleAgentSpawnForTests } from "../extensions/subagent/runner.js";
 import { setPaneExecCaptureForTests } from "../extensions/subagent/pane.js";
+import { runtimeSessionId, sessionRuntimeDir } from "../extensions/subagent/settings.js";
+import { registryPath } from "../extensions/subagent/paths.js";
+import { injectStatePathFor } from "../extensions/subagent/prompt-inject.js";
 
 const tmpDirs: string[] = [];
 let userDir: string;
@@ -97,6 +100,56 @@ async function invoke(handler: RegisteredHandlers[keyof RegisteredHandlers] | un
 	await (handler as (a: string, c: ExtensionCommandContext) => Promise<void>)(args, ctx());
 	const newOnes = messages.slice(before).filter((m) => m.content && !m.content.startsWith("Error"));
 	return newOnes[newOnes.length - 1]?.content ?? "";
+}
+
+// Invoke and return the RAW last message content (including Error messages).
+async function invokeRaw(handler: RegisteredHandlers[keyof RegisteredHandlers] | undefined, args: string): Promise<string> {
+	expect(handler).toBeDefined();
+	const { messages } = lastCapture!;
+	const before = messages.length;
+	await (handler as (a: string, c: ExtensionCommandContext) => Promise<void>)(args, ctx());
+	return messages[messages.length - 1]?.content ?? "";
+}
+
+// Deterministic runtime root for the handler-test session.
+function handlerRuntimeRoot(): string {
+	return sessionRuntimeDir(runtimeSessionId(ctx()));
+}
+
+// Seed a live pane registry entry so the inject mutation path sees a live target.
+function seedLivePane(agent: string, paneId = "%99"): void {
+	const runtimeRoot = handlerRuntimeRoot();
+	mkdirSync(runtimeRoot, { recursive: true });
+	writeFileSync(
+		registryPath(runtimeRoot),
+		JSON.stringify({
+			[agent]: {
+				agent,
+				paneId,
+				windowName: `agent:${agent}`,
+				cwd: rootTmp,
+				sessionFile: `${agent}.jsonl`,
+				promptFile: "p",
+				launcherFile: "l",
+				startedAt: new Date().toISOString(),
+			},
+		}),
+		"utf8",
+	);
+}
+
+// Mock tmux so paneExists(<id>) is true (echoes the id back).
+function mockLiveTmux(): void {
+	setPaneExecCaptureForTests(async (command: string, args: string[]) => {
+		if (command !== "tmux") return { code: 0, stdout: "", stderr: "" };
+		const [sub, ...rest] = args;
+		if (sub === "display-message") {
+			const tIdx = rest.indexOf("-t");
+			if (tIdx >= 0) return { code: 0, stdout: rest[tIdx + 1] ?? "", stderr: "" };
+			return { code: 0, stdout: "%1", stderr: "" };
+		}
+		return { code: 0, stdout: "", stderr: "" };
+	});
 }
 
 // The most recent captureHandlers() result, used by invoke() to read sent messages.
@@ -283,5 +336,61 @@ describe("adhoc handler --new-pane with pre-existing pane (PR8-F8)", () => {
 		void c2;
 		expect(splitCount()).toBe(1);
 		expect(tmuxCalls.filter((a) => a[0] === "kill-pane").length).toBe(0);
+	});
+});
+
+describe("adhoc handler inject (spec 003 PR 10)", () => {
+	test("--replace on a live pane writes state + warns", async () => {
+		process.env.TMUX = "/tmp/tmux-ij,12345,0";
+		seedLivePane("injectTgt");
+		mockLiveTmux();
+		const warns: string[] = [];
+		const origWarn = console.warn;
+		console.warn = (m: string) => warns.push(m);
+		const { handlers } = captureHandlers();
+		try {
+			const content = await invoke(handlers["agents:inject"], 'injectTgt --replace "new prompt"');
+			expect(content).toContain("Injected into injectTgt");
+			expect(content).toContain("mode=replace");
+		} finally {
+			console.warn = origWarn;
+		}
+		const stateFile = injectStatePathFor(handlerRuntimeRoot(), "injectTgt");
+		expect(existsSync(stateFile)).toBe(true);
+		const state = JSON.parse(readFileSync(stateFile, "utf8"));
+		expect(state.mode).toBe("replace");
+		expect(state.effective).toBe("new prompt");
+		expect(warns.some((w) => w.includes("inject: injectTgt mode=replace"))).toBe(true);
+	});
+
+	test("--append composes current + new into state (OQ3/A2)", async () => {
+		process.env.TMUX = "/tmp/tmux-ij,12345,0";
+		seedLivePane("injectApp");
+		mockLiveTmux();
+		const { handlers } = captureHandlers();
+		// No discovered config for injectApp → current undefined → append = new only.
+		await invoke(handlers["agents:inject"], 'injectApp --append "part"');
+		const state = JSON.parse(readFileSync(injectStatePathFor(handlerRuntimeRoot(), "injectApp"), "utf8"));
+		expect(state.mode).toBe("append");
+		expect(state.effective).toBe("part");
+	});
+
+	test("--replace on a non-live agent → error (OQ4)", async () => {
+		const { handlers } = captureHandlers();
+		const raw = await invokeRaw(handlers["agents:inject"], 'ghost --replace "x"');
+		expect(raw).toContain("inject: ghost has no live pane session to inject into");
+	});
+
+	test("--history on non-live agent shows empty history, no error (OQ4)", async () => {
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:inject"], "ghost --history");
+		expect(content).toContain("No prompt history");
+	});
+
+	test("--rollback with empty history → error", async () => {
+		// Non-live target, empty history file → rollback fails cleanly.
+		const { handlers } = captureHandlers();
+		const raw = await invokeRaw(handlers["agents:inject"], "ghost --rollback");
+		expect(raw).toContain("inject: no prior versions to roll back to");
 	});
 });
