@@ -32,6 +32,70 @@ For the full design, API surface, lifecycle, configuration, errors,
 testing, and migration path, see
 [`specs/001-multi-prompt-injection.md`](./specs/001-multi-prompt-injection.md).
 
+## Ad-hoc pane agent launch (`/agents:new` / `/agents:start`)
+
+You can launch a **one-off agent** — no `.md` file required — straight from
+`/agents:new <name>` or `/agents:start <name>`. When `<name>` is not in the
+agent inventory, the command synthesizes an in-memory agent on the spot and
+dispatches it to a fresh persistent pane (or a background one-shot).
+
+### Command grammar (spec 002 §3.6)
+
+```text
+/agents:new  <name> [<system-source>...] [<user-source>...] [--flag...] [-- <passthrough>]
+/agents:start <name> [<system-source>...] [<user-source>...] [--flag...] [-- <passthrough>]
+```
+
+A source is one of:
+
+| Source            | Meaning                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| `#<path>`         | Must-exist system-prompt **file** (errors if missing)              |
+| `#"..."`         | System-prompt: a **file** if it exists, otherwise inline text      |
+| `@<path>`         | System-prompt: a **file** if it exists, otherwise inline string    |
+| `"..."`          | Inline user prompt (the task)                                      |
+
+All `#`/`@` sources contribute to the agent's `systemPrompt`; quoted
+`"..."` sources become the user prompt dispatched to the agent. File
+sources are read at launch; inline values are joined with `---` separators.
+
+### Flags
+
+| Flag                     | Effect                                                        |
+| ------------------------ | ------------------------------------------------------------- |
+| `--replace`              | Overwrite an existing agent definition of the same name       |
+| `--model <id>`           | Force the model for this agent (overrides the default)        |
+| `--cwd <path>`           | Run the agent in this working directory                       |
+| `--pane-direction <h|v>` | Split the pane horizontally (`h`) or vertically (`v`) (C4b)   |
+| `--pane-size <N[%|l]>`   | Pane size as a percent (`N%`) or absolute lines (`Nl`) (C4b)  |
+| `--pane-target <target>` | Primary pane, next pane, or a specific pane id (C4b)          |
+| `--no-pane`              | Force background (one-shot) dispatch, never a pane            |
+| `--new-pane`             | Stop any existing pane for this agent and start a fresh one   |
+
+Any unknown `--flag` after the recognized set is passed through verbatim to
+the spawned agent as a launcher argument — use `--` before raw/passthrough
+tokens you don't want interpreted:
+
+```text
+/agents:new dba --model gpt-4o "audit the schema" -- --verbose --output ./report
+```
+
+### `/agents:new` vs `/agents:start`
+
+- `/agents:new` always starts a fresh pane (equivalent to `--new-pane`).
+- `/agents:start` resumes an existing pane for the agent if one is live;
+  pass `--new-pane` to force a stop-and-recreate.
+- `--new-pane` is **silently ignored** on `/agents:new` (it is already the
+default behavior) — it only matters for `/agents:start`.
+
+### Background fallback (C1)
+
+If `$TMUX` is not set (not running inside tmux), the ad-hoc agent is
+dispatched as a background one-shot instead — with a `tmux not available`
+warning. `--no-pane` also forces the background path. For full pane
+geometry and the launcher invocation contract, see
+[`specs/002-adhoc-pane-agent.md`](./specs/002-adhoc-pane-agent.md).
+
 ## Install
 
 ```bash
