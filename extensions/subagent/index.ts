@@ -37,7 +37,7 @@ import {
 } from "./dashboard-visibility.js";
 import { isFileLockTimeoutError } from "./file-lock.js";
 import { registerSettledHandler } from "./settled-handler.js";
-import { registerInjectionHook } from "./prompt-inject.js";
+import { registerInjectionHook, runToolInject } from "./prompt-inject.js";
 import {
 	addArtifactPathSection,
 	addSectionHeading,
@@ -1981,6 +1981,22 @@ export default function (pi: ExtensionAPI) {
 			const parentThinkingLevel = pi.getThinkingLevel();
 			const parentSessionId = runtimeSessionId(ctx);
 			const runtimeRoot = sessionRuntimeDir(parentSessionId);
+
+			// spec 003 §3.6 — subagent tool `inject` param (standalone action).
+			// When present, write the target agent's injection state instead of
+			// dispatching; the before_agent_start hook applies it next turn.
+			if (params.inject) {
+				const text = await runToolInject({
+					runtimeRoot,
+					name: params.inject.name,
+					mode: params.inject.mode,
+					sources: params.inject.sources,
+					rollback: params.inject.rollback,
+					history: params.inject.history,
+					cwd: params.inject.cwd ?? ctx.cwd,
+				});
+				return { content: [{ type: "text", text }] };
+			}
 
 			const hasChain = (params.chain?.length ?? 0) > 0;
 			const hasTasks = (params.tasks?.length ?? 0) > 0;
