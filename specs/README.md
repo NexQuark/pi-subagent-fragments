@@ -10,6 +10,7 @@ PRs.
 |-----|----------------------------------------|------------|----------------|
 | 001 | Multi-prompt fragment injection (static, spawn-time) | Implemented | `feature/fragments` (v0.1.0) |
 | 002 | Ad-hoc pane agent launch + call-time prompt assembly | Implemented | PR 6-9 (v0.2.0) — archived |
+| 003 | Runtime prompt injection (`/agents:inject` + `subagent.inject`) | Implemented | PR 10-13 (v0.3.0) |
 
 ## Status legend
 

@@ -6,6 +6,50 @@ see `UPSTREAM.md` for the sync policy and `specs/` for design history.
 
 ## Fork changes
 
+### 0.3.0 — 2026-08-12
+
+Implemented spec 003 (runtime prompt injection). Adds `/agents:inject` and
+the `subagent` tool `inject` param for mutating a running agent's system
+prompt without a restart — the extension's `before_agent_start` hook
+applies a one-shot pending injection at the target's next turn and records
+applied versions in a per-agent history (FIFO cap 10). Core design in
+`specs/003-prompt-inject.md`; PRs 10-13, reviewed under the charter TDD
+cycle (verdicts in `specs/_reviews/`).
+
+Added:
+
+- `/agents:inject <name> [--replace|--append|--add] [<system-source>...]`
+  with R2 sources (`#<path>` must-exist file, `#"..."` file-or-inline,
+  bare inline). Mutations (`replace`/`append`/`add`) require a live pane
+  session (OQ4); `--history` and `--rollback [N]` operate on the history
+  file only.
+- `--append` / `--add` are aliases in v1 (OQ3/A2): both compose against
+  the agent's **real current prompt** (`event.systemPrompt`) at apply time
+  — never launch config, which lacks the pane-time fragment composition
+  (reviewer F2). `--replace` installs the given sources verbatim.
+- `--rollback N` (N >= 1, explicit guard) reverts to the version N prompts
+  ago; `--history` prints a markdown table (`# | mode | bytes |
+  timestamp`). `--cwd` is the source-resolution root only (OQ5), never a
+  chdir for the running agent.
+- `subagent` tool `inject` param: `{name, mode?, sources?:
+  {kind:'file'|'string', value}[], rollback?, history?, cwd?}` — a
+  standalone action (no dispatch) writing the same injection state via the
+  shared `runToolInject` helper (single source of truth with the slash
+  handler). Tool-side mutation does NOT require a live pane.
+- Hook side (`registerInjectionHook`, keyed by
+  `ctx.sessionManager.getSessionName()`): reads the `inject/<agent>.json`
+  state file, composes against the real current prompt, installs the
+  result, pushes the applied version to history **on apply**, and unlinks
+  the state one-shot — a second turn does not re-inject (A5). Chains
+  cleanly beside the existing agent-list `before_agent_start` handler.
+- `prompt-inject.ts`: `composeInjection` (pure), `injectStatePathFor` /
+  `promptHistoryPathFor` (A3 single shared path helpers),
+  `writeInjectionState` / `readInjectionState` /
+  `consumeInjectionState` (one-shot consumed marker),
+  `installPendingInjection`, `registerInjectionHook`, `runToolInject`;
+  `prompt-history.ts`: `PromptHistory` FIFO cap 10, 1-indexed
+  newest-first `get(n)`.
+
 ### 0.2.0 — 2026-08-12
 
 Implemented spec 002 (ad-hoc pane agent launch). Adds the `agents:new` and

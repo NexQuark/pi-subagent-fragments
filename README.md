@@ -97,6 +97,80 @@ warning. `--no-pane` also forces the background path. For full pane
 geometry and the launcher invocation contract, see
 [`specs/archive/002-adhoc-pane-agent.v1.md`](./specs/archive/002-adhoc-pane-agent.v1.md).
 
+## Runtime prompt injection (`/agents:inject`)
+
+You can **mutate a running agent's system prompt** without restarting it.
+`/agents:inject` writes a pending injection into the target agent's session
+runtime dir; the extension's `before_agent_start` hook applies it at the
+agent's next turn and records the applied version in a per-agent history.
+
+### Command grammar (spec 003 §3.1)
+
+```text
+/agents:inject <name> [--replace | --append | --add] [<system-source>...]
+               [--rollback [N]] [--history] [--cwd <path>] [-- <passthrough>]
+```
+
+- `--replace` installs exactly the given sources as the new prompt.
+- `--append` / `--add` **compose against the agent's real current prompt**
+  at apply time (`current + separator + new`). They are aliases in v1.
+- `--rollback [N]` reverts to the version N prompts ago (`--rollback 1` =
+  immediately previous). `N` must be `>= 1`.
+- `--history` prints a markdown table of applied versions (`# | mode |
+  bytes | timestamp`).
+- `--cwd <path>` is the **source-resolution root only** — it does not
+  relocate the running agent.
+
+System sources use the same R2 grammar as `/agents:new`: `#<path>`
+(must-exist file), `#"..."` (file-or-inline), or a bare inline string.
+
+```text
+/agents:inject dba --append "#<docs/audit-policy.md>"
+/agents:inject dba --replace "You are the audit DBA now."
+/agents:inject dba --history
+/agents:inject dba --rollback 2
+```
+
+**Liveness requirement (mutation only)**: `--replace`/`--append`/`--add`
+require the target to have a **live pane session** — there is no session to
+inject into otherwise. `--history` and `--rollback` only touch the history
+file and work without a live pane.
+
+### The `subagent` tool `inject` param
+
+The `subagent` tool also accepts an `inject` object — a **standalone
+action** (no `agent`/`task` dispatch needed) that writes the same pending
+injection:
+
+```jsonc
+{
+  "inject": {
+    "name": "dba",
+    "mode": "append", // or replace / add / rollback / history
+    "sources": [{ "kind": "string", "value": "Audit all DDL." }],
+    "rollback": 1,     // with mode rollback
+    "cwd": "/path"    // source-resolution root only
+  }
+}
+```
+
+**Unlike the slash handler, the tool-side mutation does NOT require a live
+pane** — it writes the state and the hook applies it whenever the target
+agent's session next turns (the target may not be running yet).
+
+### Apply semantics
+
+- One-shot: the state file is consumed (unlinked) on first apply — a second
+turn does not re-inject.
+- The applied version is pushed to history **on apply**, keyed by the
+agent's real session name (`ctx.sessionManager.getSessionName()`), with
+`prev` = the real current prompt from the hook event.
+- History is capped at 10 versions (FIFO) and lives in the session runtime
+dir (`~/.pi/agent/vstack/sessions/<sessionId>/pi-subagent-fragments/`).
+
+For the full design, see
+[`specs/003-prompt-inject.md`](./specs/003-prompt-inject.md).
+
 ## Install
 
 ```bash
