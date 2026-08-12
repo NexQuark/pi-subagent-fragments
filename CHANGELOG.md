@@ -6,6 +6,92 @@ see `UPSTREAM.md` for the sync policy and `specs/` for design history.
 
 ## Fork changes
 
+### 0.2.0 — 2026-08-12
+
+Implemented spec 002 (ad-hoc pane agent launch). Adds the `agents:new` and
+`agents:start` ad-hoc slash commands for launching an agent that is NOT in
+the inventory, with an R2 source grammar and explicit pane/bg dispatch
+control. Core design in `specs/002-adhoc-pane-agent.md` (through v1.8);
+PRs 6-8, reviewed under the charter TDD cycle (verdicts in `specs/_reviews/`).
+
+Added:
+
+- `agents:new <name>` / `agents:start <name>` ad-hoc dispatch when the name
+  is not in the agent inventory. An ad-hoc agent is synthesized on the fly
+  (`synthesizeAdhocAgent`) and dispatched, instead of erroring on an unknown
+  name.
+- R2 source grammar for ad-hoc arguments, parsed by `parseAdhocArgs` +
+  quote-aware `tokenizeArgs` in `extensions/subagent/agents-command.ts`:
+  `#<path>` / `#"..."` (file path, inline-quoted), `@...` (path-or-text),
+  `"..."` (inline text), 8 flags, and `--` separator for passthrough.
+- Pane/bg dispatch control:
+  - `--no-pane` forces a background dispatch (`runSingleAgent`) regardless
+    of tmux; on a tmux-less host ad-hoc dispatch falls back to bg with a
+    one-time "tmux not available" warning (C1).
+  - `--new-pane` forces a fresh persistent pane (stop-then-create) rather
+    than reusing a live one (C2).
+  - `--pane-direction` / `--pane-size` / `--pane-target` configure the
+    tmux split via the new `buildTmuxSplitArgs` helper + `paneDirection` /
+    `paneSize` / `paneTarget` params on `ensurePersistentPane`,
+    `queuePersistentPaneTask`, and `runPersistentPaneAgent` (C4b).
+- `--model` / `--cwd` / `--replace` are parsed and threaded into the
+  ad-hoc agent config / dispatch (passthrough args are appended to the
+  launcher argv via `shellQuote` — D8).
+- C4a tmux split retry: when a `split-window` reports a missing size, the
+  retry drops the `-p`/size tokens and re-runs, via the pure
+  `applyC4aRetry(args)` helper in `agents.ts`.
+- Shared pure helpers in `extensions/subagent/agents.ts`:
+  `resolveAdhocPane(tmux, noPane)` (= `noPane ? false : tmux`, the single
+  source of truth for `--no-pane`/tmux-fallback routing) and
+  `shouldAdhocFallbackToBg`. `resolveForceNewPane(command, newPaneFlag)`
+  (= `command === 'new' || newPaneFlag`) in `agents-command.ts`.
+- New handler-level test harness `tests/adhoc-handler.test.ts`: invokes the
+  real `agentsHandler` via `registerAgentsCommands` + a mock pi, with
+  `setSingleAgentSpawnForTests` (runner) and `setPaneExecCaptureForTests`
+  (pane) seams, so dispatch paths run without spawning real processes. This
+  closes the "parsed-but-not-wired" false-confidence class that pure-helper
+  tests missed.
+- Test files: `tests/adhoc-slash.test.ts` (R2 grammar, L1-L15, C2),
+  `tests/adhoc-bugfix.test.ts` (C1 warn scope, cycle 3),
+  `tests/pane-resilience.test.ts` (C4a mock tmux retry),
+  `tests/adhoc-handler.test.ts` (C1/C2/C4b handler-level).
+- `extensions/subagent/agents-command.ts` — ad-hoc branch in the
+  `agents:new`/`agents:start` handler, with `parseAdhocArgs` and the
+  `AdhocParsedArgs` / `AdhocSystemSource` / `AdhocUserSource` types.
+- `specs/002-adhoc-pane-agent.md` — full design (grammar, dispatch
+  semantics, acceptance criteria, PR 6→7→8→9 split, risks, revision
+  history through v1.8).
+
+Fixed:
+
+- `--no-pane` is no longer inverted (was `pane: fallbackToBg ? false : true`,
+  which dropped the parsed `noPane` signal and forced a pane).
+- `--no-pane` genuinely routes to the bg lane — the handler previously set
+  `pane: false` cosmetically but still called `queuePersistentPaneTask`
+  (which threw `ensureTmux` on a tmux-less host). It now branches on
+  `wantPane`: pane lane → `queuePersistentPaneTask`; bg lane →
+  `runSingleAgent` (reused, not copied).
+- The "tmux not available" warning now fires only when `$TMUX` is actually
+  unset (was firing on tmux hosts passing explicit `--no-pane`).
+
+Removed:
+
+- `tests/subagent-bridge-id.test.ts` — enforced a cross-package contract
+  with `pi-extensions/pi-session-bridge/`, which is not part of this
+  standalone fork's sparse-checkout. The file had a module-resolve error
+  and was already excluded from suite runs; the 0.2.0 squash dropped it so
+  the main-branch suite runs clean.
+
+Suite status (0.2.0, excluding the removed untracked file):
+406 pass / 0 fail / 0 todo / 728 expect / 41 files.
+
+Known follow-ups (PR 9 docs scope, non-blocking for v0.2.0):
+
+- README R2 grammar + C4b user docs (`--pane-direction` / `--pane-size` /
+  `--pane-target`) + `--replace` / `--model` / `--cwd` examples (sub-tmux).
+- Reinforce the C2 handler-level test to prove stop-then-create against a
+  pre-existing pane (PR8-F8 in `_pr8-3.md`).
+
 ### 0.1.0 — 2026-08-12
 
 Initial fork release. Implemented spec 001 (multi-prompt fragment injection,

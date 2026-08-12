@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Approved (round 3 polish-2 landed; see § 11 + `specs/_reviews/002-{1,2,3}.md`) |
+| **Status** | Implemented (released in v0.2.0; see `specs/_reviews/_pr{7,8,9}-*.md`) |
 | **Target version** | `0.2.0` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack@faeb65af` (`pi-agents-tmux` 2.8.1) |
