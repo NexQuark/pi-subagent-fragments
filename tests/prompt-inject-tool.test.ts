@@ -131,6 +131,21 @@ describe("subagent tool inject (spec 003 PR 12)", () => {
 		expect(res?.content?.[0]?.text).toContain("| 1 |");
 	});
 
+	describe.each([
+		["agent", { agent: "foo" }],
+		["task", { task: "do" }],
+		["tasks", { tasks: [{ agent: "foo", task: "do" }] }],
+		["chain", { chain: [{ agent: "foo", task: "do" }] }],
+	] as Array<[string, Record<string, unknown>]>)("standalone-only guard (F3)", (label, extra) => {
+		test(`inject + ${label} coexisting is rejected, not silently ignored`, async () => {
+			const { execute } = captureSubagentTool();
+			await expect(
+				execute("9", { inject: { name: "g", mode: "replace", sources: [{ kind: "string", value: "X" }] }, ...extra }, undefined, undefined, toolCtx()),
+			).rejects.toThrow(/inject.*standalone|standalone.*inject/i);
+			expect(existsSync(injectStatePathFor(runtimeRoot, "g"))).toBe(false);
+		});
+	});
+
 	test("inject rollback 1 writes restored prior to state", async () => {
 		const histFile = promptHistoryPathFor(runtimeRoot, "toolRoll");
 		mkdirSync(join(runtimeRoot, "prompt-history"), { recursive: true });

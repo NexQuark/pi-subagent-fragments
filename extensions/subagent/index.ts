@@ -1985,7 +1985,12 @@ export default function (pi: ExtensionAPI) {
 			// spec 003 §3.6 — subagent tool `inject` param (standalone action).
 			// When present, write the target agent's injection state instead of
 			// dispatching; the before_agent_start hook applies it next turn.
+			// F3 guard: inject must be standalone — never silently coexist with
+			// dispatch params (agent/task/tasks/chain) or the dispatch is dropped.
 			if (params.inject) {
+				if (params.agent !== undefined || params.task !== undefined || (params.tasks?.length ?? 0) > 0 || (params.chain?.length ?? 0) > 0) {
+					throw new Error("inject is a standalone action; do not combine it with agent/task/tasks/chain");
+				}
 				const text = await runToolInject({
 					runtimeRoot,
 					name: params.inject.name,
