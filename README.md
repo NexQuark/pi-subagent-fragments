@@ -95,7 +95,7 @@ If `$TMUX` is not set (not running inside tmux), the ad-hoc agent is
 dispatched as a background one-shot instead — with a `tmux not available`
 warning. `--no-pane` also forces the background path. For full pane
 geometry and the launcher invocation contract, see
-[`specs/002-adhoc-pane-agent.md`](./specs/002-adhoc-pane-agent.md).
+[`specs/archive/002-adhoc-pane-agent.v1.md`](./specs/archive/002-adhoc-pane-agent.v1.md).
 
 ## Install
 
