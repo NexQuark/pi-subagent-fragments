@@ -12,6 +12,7 @@ import {
 	type TruncationResult,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentConfig } from "./agents.js";
+import { composeAgentPrompt } from "./prompt-compose.js";
 import { sanitizeCwdSnapshotText, setGitExecFileForTests as setSnapshotGitExecFileForTests, snapshotCwdGitState } from "./cwd-snapshot.js";
 import { getFinalOutput, stringifyError } from "./format.js";
 import { safeFileName } from "./names.js";
@@ -641,7 +642,12 @@ async function runSingleAgentAttempt(
 		await fs.promises.mkdir(path.dirname(transcriptPath), { recursive: true, mode: 0o700 });
 		await fs.promises.writeFile(transcriptPath, "", { encoding: "utf-8", mode: 0o600 });
 		if (agent.systemPrompt.trim()) {
-			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
+			const composed = composeAgentPrompt({
+				body: agent.systemPrompt,
+				fragments: [],
+				mode: agent.systemPromptMode ?? "append",
+			});
+			const tmp = await writePromptToTempFile(agent.name, composed);
 			tmpPromptDir = tmp.dir;
 			tmpPromptPath = tmp.filePath;
 			args.push("--append-system-prompt", tmpPromptPath);

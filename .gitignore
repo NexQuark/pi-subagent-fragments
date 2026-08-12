@@ -1,2 +1,9 @@
 node_modules/
 bun.lock
+
+# E2E driver: peer-dep symlink farm (pi provides these in production,
+# but bun needs NODE_PATH help to resolve them outside the pi runtime).
+e2e/local_node_modules/
+
+# npm pack output (rebuild via \`npm pack\` when needed).
+nexquark-pi-subagent-fragments-*.tgz

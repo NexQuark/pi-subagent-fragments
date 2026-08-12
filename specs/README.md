@@ -1,0 +1,33 @@
+# Specifications
+
+This directory contains design specifications for `pi-subagent-fragments`
+features. Each spec is numbered and tracks the corresponding implementation
+PRs.
+
+## Index
+
+| ID  | Title                                  | Status     | Implementation |
+|-----|----------------------------------------|------------|----------------|
+| 001 | Multi-prompt fragment injection (static, spawn-time) | Draft → Implementation | `feature/fragments` |
+
+## Status legend
+
+- **Draft** — author writing; not yet ready for implementation.
+- **Approved** — accepted; implementation in progress.
+- **Implemented** — code merged; spec frozen.
+- **Superseded** — replaced by a later spec; kept for history.
+
+## Per-spec sections (typical structure)
+
+Each spec follows roughly:
+
+1. Background and goal
+2. Current state analysis (with file:line citations into this fork's
+   `extensions/subagent/`)
+3. Design
+4. Implementation details
+5. Acceptance criteria
+6. Implementation steps (per PR)
+8. Spec after-completion archive path
+9. _(extensions)_ — feature-specific design, e.g. dynamic switching, security
+10. Revision history
