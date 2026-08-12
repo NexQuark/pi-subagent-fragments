@@ -52,12 +52,13 @@ A source is one of:
 | ----------------- | ------------------------------------------------------------------ |
 | `#<path>`         | Must-exist system-prompt **file** (errors if missing)              |
 | `#"..."`         | System-prompt: a **file** if it exists, otherwise inline text      |
-| `@<path>`         | System-prompt: a **file** if it exists, otherwise inline string    |
+| `@<path>`         | User prompt: a **file** if it exists, otherwise inline string      |
 | `"..."`          | Inline user prompt (the task)                                      |
 
-All `#`/`@` sources contribute to the agent's `systemPrompt`; quoted
-`"..."` sources become the user prompt dispatched to the agent. File
-sources are read at launch; inline values are joined with `---` separators.
+`#<path>` and `#"..."` sources contribute to the agent's `systemPrompt`;
+`@<path>` (file-or-inline) and quoted `"..."` sources become the user
+prompt dispatched to the agent. File sources are read at launch; inline
+values are joined with `---` separators.
 
 ### Flags
 
