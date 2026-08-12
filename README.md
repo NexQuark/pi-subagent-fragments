@@ -34,12 +34,28 @@ testing, and migration path, see
 
 ## Install
 
-```
+```bash
+npm install -g @nexquark/pi-subagent-fragments
 pi install npm:@nexquark/pi-subagent-fragments
 ```
 
-_(Available after the first `npm publish`; pre-publish testing uses
-`pi install --path .` from this repo.)_
+The `npm install -g` step downloads and unpacks the package under
+`npm root -g`; the `pi install` step registers it with Pi's
+`~/.pi/agent/settings.json` (or `~/.pi/settings.json` for project-local).
+Restart Pi to load the extension. After registration, `/agents`,
+`subagent`, `delegate_subagent`, `get_subagent_result`,
+`wait_for_subagent_idle`, `steer_subagent`, and `stop_subagent` are
+available alongside the existing `pi-agents-tmux` tool surface.
+
+To uninstall:
+
+```bash
+pi remove npm:@nexquark/pi-subagent-fragments
+npm uninstall -g @nexquark/pi-subagent-fragments
+```
+
+For local development from this repo (no `npm publish` round-trip
+required), use `pi install --path .` from the repo root.
 
 ## License
 
