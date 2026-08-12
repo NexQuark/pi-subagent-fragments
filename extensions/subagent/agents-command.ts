@@ -9,7 +9,7 @@ import { runSingleAgent } from "./runner.js";
 import { formatTraceView, recordTraceRef, resolveTraceRecord } from "./renderers.js";
 import { pollPaneCompletions, readPaneRegistry, readTaskRegistry, emitSubagentEvent } from "./tasks.js";
 import { runtimeSessionId, sessionRuntimeDir } from "./settings.js";
-import { composeInjection, writeInjectionState } from "./prompt-inject.js";
+import { writeInjectionState } from "./prompt-inject.js";
 import { PromptHistory, promptHistoryPathFor } from "./prompt-history.js";
 import type { SingleResult, SubagentDashboardItem, SubagentDetails } from "./types.js";
 
@@ -174,10 +174,13 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 					content = `# Prompt history for ${name}\n\n` + lines.join("\n");
 					messageDetails = { action: "inject", mode: "history", agent: name };
 				} else if (parsed.mode === "rollback") {
+					if (parsed.rollback < 1) throw new Error("inject: --rollback N must be >= 1");
 					const hist = new PromptHistory(promptHistoryPathFor(runtimeRoot, name));
 					const target = hist.get(parsed.rollback);
 					if (!target) throw new Error(`inject: no prior versions to roll back to`);
-					await writeInjectionState(runtimeRoot, name, { mode: "rollback", effective: target.prev });
+					// rollback writes the restored prompt as a single fragment; the
+					// hook installs it verbatim (replace semantics).
+					await writeInjectionState(runtimeRoot, name, { mode: "rollback", fragments: [target.prev] });
 					const bytes = Buffer.byteLength(target.prev, "utf-8");
 					const hlen = hist.list().length;
 					console.warn(`[pi-subagent-fragments] inject: ${name} mode=rollback bytes=${bytes} history=${hlen}`);
@@ -189,23 +192,18 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 					if (!live) {
 						throw new Error(`inject: ${name || "(missing)"} has no live pane session to inject into`);
 					}
-					// compose from current + sources, write state. `current` = the
-					// target's launch system prompt (discovered config) as the
-					// recorded effective base; the hook refines with the real
-					// event.systemPrompt in PR 11.
-					const agentConfig = findAgent(name);
-					const current = agentConfig?.systemPrompt ?? undefined;
-					const composed = composeInjection({
-						mode: parsed.mode,
-						sources: parsed.sources,
-						current,
-					});
-					await writeInjectionState(runtimeRoot, name, { mode: parsed.mode, effective: composed.effective });
+					// PR 11: write side stores ONLY `{ mode, fragments }`. The final
+					// effective prompt is composed at hook-apply time against the
+					// agent's REAL current (`event.systemPrompt`) — never launch
+					// config, which lacks the pane.ts fragment composition (F2).
+					const fragments = parsed.sources.map((s) => (s.type === "inline" ? s.value : s.content));
+					const bytes = fragments.reduce((n, f) => n + Buffer.byteLength(f, "utf-8"), 0);
+					await writeInjectionState(runtimeRoot, name, { mode: parsed.mode, fragments });
 					const hist = new PromptHistory(promptHistoryPathFor(runtimeRoot, name));
 					const hlen = hist.list().length;
-					console.warn(`[pi-subagent-fragments] inject: ${name} mode=${parsed.mode} bytes=${composed.bytes} history=${hlen}`);
-					content = `Injected into ${name}. mode=${parsed.mode} bytes=${composed.bytes} history=${hlen}`;
-					messageDetails = { action: "inject", mode: parsed.mode, agent: name, bytes: composed.bytes, history: hlen };
+					console.warn(`[pi-subagent-fragments] inject: ${name} mode=${parsed.mode} bytes=${bytes} history=${hlen}`);
+					content = `Injected into ${name}. mode=${parsed.mode} bytes=${bytes} history=${hlen}`;
+					messageDetails = { action: "inject", mode: parsed.mode, agent: name, bytes, history: hlen };
 				}
 				await persistRuntimeSnapshot(ctx, runtimeRoot);
 			} else if (command === "send") {
@@ -739,6 +737,7 @@ export function parseInjectArgs(args: string, cwd: string): InjectParsedArgs {
 				parsed.rollback = parseInt(next, 10);
 				i++;
 			}
+			if (parsed.rollback < 1) throw new Error("inject: --rollback N must be >= 1");
 			continue;
 		}
 

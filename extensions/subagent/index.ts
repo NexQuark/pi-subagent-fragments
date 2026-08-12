@@ -37,6 +37,7 @@ import {
 } from "./dashboard-visibility.js";
 import { isFileLockTimeoutError } from "./file-lock.js";
 import { registerSettledHandler } from "./settled-handler.js";
+import { registerInjectionHook } from "./prompt-inject.js";
 import {
 	addArtifactPathSection,
 	addSectionHeading,
@@ -1818,6 +1819,14 @@ export default function (pi: ExtensionAPI) {
 		return {
 			systemPrompt: `${event.systemPrompt}\n\n## Restricted Subagent Delegation\nUse \`delegate_subagent\` only for context-protecting exploratory or reconnaissance work — read exact files yourself before editing. Include all needed context in the task; parent conversation is not shared with the child. The child returns a single text summary.\n\nAllowed targets for ${callerName}:\n${targetLines}`,
 		};
+	});
+
+	// spec 003 PR 11 — runtime prompt injection (path E). Separate
+	// before_agent_start listener; pi chains handlers (each sees the evolving
+	// event.systemPrompt). Keyed by session name (A1), consumes the
+	// inject/<agent>.json state one-shot and installs the composed prompt.
+	registerInjectionHook(pi, {
+		runtimeRootForContext: (ctx) => sessionRuntimeDir(runtimeSessionId(ctx as ExtensionContext)),
 	});
 
 	pi.registerTool({

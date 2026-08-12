@@ -15,7 +15,9 @@
 import { join } from "node:path";
 import { safeFileName } from "./names.js";
 import { composeAgentPrompt, DEFAULT_PROMPT_SEPARATOR } from "./prompt-compose.js";
+import { PromptHistory, promptHistoryPathFor } from "./prompt-history.js";
 import type { AdhocSystemSource } from "./agents-command.js";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export type InjectMode = "replace" | "append" | "add";
 
@@ -73,8 +75,11 @@ export function injectStatePathFor(runtimeRoot: string, agentName: string): stri
 }
 
 export interface InjectionState {
+	/** mode selector; `rollback` installs the single restored fragment verbatim. */
 	mode: "replace" | "append" | "add" | "rollback";
-	effective: string;
+	/** resolved source contents only — the hook composes against the real
+	 *  current (`event.systemPrompt`), never launch config (reviewer F2). */
+	fragments: string[];
 	queuedAt: string;
 	queuedBy: string | null;
 }
@@ -83,11 +88,14 @@ export interface InjectionState {
  * Write a pending injection state file (write side of the hook contract).
  * The `before_agent_start` hook reads and consumes it one-shot. Lives
  * beside the pane registry under the session runtime dir (OQ2/A3).
+ *
+ * PR 11: stores `{ mode, fragments }` only; the final effective prompt is
+ * composed at hook-apply time against the agent's real current prompt.
  */
 export async function writeInjectionState(
 	runtimeRoot: string,
 	agentName: string,
-	state: Pick<InjectionState, "mode" | "effective">,
+	state: Pick<InjectionState, "mode" | "fragments">,
 	queuedBy: string | null = null,
 ): Promise<string> {
 	const file = injectStatePathFor(runtimeRoot, agentName);
@@ -95,10 +103,95 @@ export async function writeInjectionState(
 	await mkdir(join(runtimeRoot, "inject"), { recursive: true });
 	const full: InjectionState = {
 		mode: state.mode,
-		effective: state.effective,
+		fragments: state.fragments,
 		queuedAt: new Date().toISOString(),
 		queuedBy,
 	};
 	await writeFile(file, JSON.stringify(full, null, 2), "utf8");
 	return file;
+}
+
+/**
+ * Read a pending injection state file, or null if none. Does NOT consume.
+ */
+export async function readInjectionState(runtimeRoot: string, agentName: string): Promise<InjectionState | null> {
+	const file = injectStatePathFor(runtimeRoot, agentName);
+	const { readFile } = await import("node:fs/promises");
+	try {
+		return JSON.parse(await readFile(file, "utf8")) as InjectionState;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Read + unlink a pending injection state file one-shot (A5 consumed marker).
+ * Returns null when there is nothing pending.
+ */
+export async function consumeInjectionState(runtimeRoot: string, agentName: string): Promise<InjectionState | null> {
+	const state = await readInjectionState(runtimeRoot, agentName);
+	if (!state) return null;
+	const { rm } = await import("node:fs/promises");
+	await rm(injectStatePathFor(runtimeRoot, agentName), { force: true });
+	return state;
+}
+
+/**
+ * Hook-side application of a pending injection for a session.
+ *
+ * Composes the final effective prompt against the REAL current
+ * (`event.systemPrompt` — the chained prompt as of this handler), pushes
+ * the applied version to history (on-apply, reviewer PR 11), and consumes
+ * the state file one-shot. Returns the `{ systemPrompt }` modifier the
+ * `before_agent_start` hook returns, or null when nothing is pending.
+ */
+export async function installPendingInjection(input: {
+	runtimeRoot: string;
+	sessionName: string;
+	eventSystemPrompt: string;
+}): Promise<{ systemPrompt: string } | null> {
+	const state = await consumeInjectionState(input.runtimeRoot, input.sessionName);
+	if (!state) return null;
+	// rollback installs a full restored prompt (single fragment) verbatim →
+	// reuse replace semantics (new-only).
+	const mode = state.mode === "rollback" ? "replace" : state.mode;
+	const sources: AdhocSystemSource[] = state.fragments.map((value) => ({ type: "inline", value }));
+	const composed = composeInjection({ mode, sources, current: input.eventSystemPrompt });
+	// Push the APPLIED version (prev = real current, new = effective).
+	const hist = new PromptHistory(promptHistoryPathFor(input.runtimeRoot, input.sessionName));
+	hist.push({
+		prev: input.eventSystemPrompt,
+		new: composed.effective,
+		mode: state.mode,
+		timestamp: new Date().toISOString(),
+		source: null,
+	});
+	return { systemPrompt: composed.effective };
+}
+
+/**
+ * Hook deps for `registerInjectionHook`.
+ */
+export interface InjectionHookDeps {
+	/** Derive the session runtime root from the hook ctx (OQ2). */
+	runtimeRootForContext: (ctx: unknown) => string;
+}
+
+/**
+ * Register the `before_agent_start` injection handler. Keyed by
+ * `ctx.sessionManager.getSessionName()` (round 1 review A1). Chains cleanly
+ * beside the existing agent-list handler (pi calls each listener with the
+ * evolving chained `event.systemPrompt`).
+ */
+export function registerInjectionHook(pi: ExtensionAPI, deps: InjectionHookDeps): void {
+	pi.on("before_agent_start", async (event: any, ctx: any) => {
+		const sessionName = ctx?.sessionManager?.getSessionName?.();
+		if (!sessionName) return;
+		const runtimeRoot = deps.runtimeRootForContext(ctx);
+		return await installPendingInjection({
+			runtimeRoot,
+			sessionName,
+			eventSystemPrompt: event?.systemPrompt ?? "",
+		});
+	});
 }
