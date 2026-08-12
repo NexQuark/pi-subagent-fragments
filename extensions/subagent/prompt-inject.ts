@@ -172,6 +172,74 @@ export async function installPendingInjection(input: {
 /**
  * Hook deps for `registerInjectionHook`.
  */
+export interface ToolInjectSource {
+	kind: "file" | "string";
+	value: string;
+}
+
+export interface ToolInjectInput {
+	runtimeRoot: string;
+	name: string;
+	mode?: "replace" | "append" | "add" | "rollback" | "history";
+	sources?: ToolInjectSource[];
+	rollback?: number;
+	history?: boolean;
+	cwd?: string;
+}
+
+/**
+ * subagent tool `inject` (spec 003 §3.6 / §4.3) — a standalone action that
+ * writes the target agent's injection state (same writeInjectionState the
+ * /agents:inject slash handler uses; single source of truth for the state
+ * schema). The `before_agent_start` hook applies it on the target's next
+ * turn. `cwd` is the source-resolution root only (OQ5), not a chdir.
+ *
+ * Returns the tool result text; emits the same console.warn as the handler.
+ */
+export async function runToolInject(input: ToolInjectInput): Promise<string> {
+	const name = input.name;
+	const hist = new PromptHistory(promptHistoryPathFor(input.runtimeRoot, name));
+
+	const historyRequested = input.history === true || input.mode === "history";
+	if (historyRequested) {
+		const versions = hist.list();
+		const lines =
+			versions.length === 0
+				? [`No prompt history for ${name}.`]
+				: [
+						"| # | mode | bytes | timestamp |",
+						"|---|---|---|---|",
+						...versions.map((v, i) => `| ${versions.length - i} | ${v.mode} | ${Buffer.byteLength(v.new, "utf-8")} | ${v.timestamp} |`),
+				  ];
+		return `# Prompt history for ${name}\n\n` + lines.join("\n");
+	}
+
+	const rollbackRequested = input.mode === "rollback" || (input.rollback !== undefined && input.rollback !== null);
+	if (rollbackRequested) {
+		const n = input.rollback ?? 1;
+		if (n < 1) throw new Error("inject: --rollback N must be >= 1");
+		const target = hist.get(n);
+		if (!target) throw new Error("inject: no prior versions to roll back to");
+		await writeInjectionState(input.runtimeRoot, name, { mode: "rollback", fragments: [target.prev] });
+		const bytes = Buffer.byteLength(target.prev, "utf-8");
+		const hlen = hist.list().length;
+		console.warn(`[pi-subagent-fragments] inject: ${name} mode=rollback bytes=${bytes} history=${hlen}`);
+		return `Rolled back ${name} to version ${n} (bytes=${bytes}).`;
+	}
+
+	const mode = input.mode ?? "append";
+	// Resolve sources → fragments (file content read at resolution root).
+	const root = input.cwd ?? process.cwd();
+	const { readFileSync } = await import("node:fs");
+	const { resolve } = await import("node:path");
+	const fragments = (input.sources ?? []).map((s) => (s.kind === "string" ? s.value : readFileSync(resolve(root, s.value), "utf8")));
+	const bytes = fragments.reduce((n, f) => n + Buffer.byteLength(f, "utf-8"), 0);
+	await writeInjectionState(input.runtimeRoot, name, { mode, fragments });
+	const hlen = hist.list().length;
+	console.warn(`[pi-subagent-fragments] inject: ${name} mode=${mode} bytes=${bytes} history=${hlen}`);
+	return `Injected into ${name}. mode=${mode} bytes=${bytes} history=${hlen}`;
+}
+
 export interface InjectionHookDeps {
 	/** Derive the session runtime root from the hook ctx (OQ2). */
 	runtimeRootForContext: (ctx: unknown) => string;

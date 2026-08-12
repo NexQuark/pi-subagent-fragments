@@ -20,6 +20,26 @@ const AgentScopeSchema = StringEnum(["user", "project", "both"] as const, {
 	default: "project",
 });
 
+const SystemPromptSource = Type.Object({
+	kind: StringEnum(["file", "string"] as const, {
+		description: '"file" → resolve value as a path relative to inject.cwd (or caller cwd); "string" → use value verbatim',
+	}),
+	value: Type.String({ description: "File path (kind=file) or inline text (kind=string)" }),
+});
+
+// spec 003 §3.6 — subagent tool `inject` param. A standalone action that
+// writes the injection state for a target agent's session (same
+// writeInjectionState the /agents:inject slash handler uses); the
+// before_agent_start hook applies it on the target's next turn.
+const InjectParam = Type.Object({
+	name: Type.String({ description: "Target agent whose session receives the injection" }),
+	mode: Type.Optional(StringEnum(["replace", "append", "add", "rollback", "history"] as const, { description: "Injection mode. Default: append. rollback/history select versions." })),
+	sources: Type.Optional(Type.Array(SystemPromptSource, { description: "System prompt sources (R2 grammar: file or string)" })),
+	rollback: Type.Optional(Type.Number({ description: "Rollback N versions back (1-indexed); 1 = immediately previous. Default 1." })),
+	history: Type.Optional(Type.Boolean({ description: "List prior versions instead of mutating" })),
+	cwd: Type.Optional(Type.String({ description: "Source-resolution root only (not a chdir for the running agent)" })),
+});
+
 export const SubagentParams = Type.Object({
 	agent: Type.Optional(Type.String({ description: "Name of the agent to invoke (for single mode)" })),
 	task: Type.Optional(Type.String({ description: "Task to delegate (for single mode)" })),
@@ -98,6 +118,9 @@ export const SubagentParams = Type.Object({
 				"For pane-mode agents only. Restore an archived pane session before launching. Use 'latest'/'latest-archived' or an archived session filename/path from sessions/archived. Cannot be combined with forceSpawn.",
 		}),
 	),
+	// spec 003 §3.6 — standalone runtime prompt injection. When present, the
+	// tool writes the target agent's injection state instead of dispatching.
+	inject: Type.Optional(InjectParam),
 });
 
 export const GetSubagentResultParams = Type.Object({
