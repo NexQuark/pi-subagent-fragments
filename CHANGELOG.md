@@ -1,5 +1,77 @@
 # Changelog
 
+All notable changes to `@nexquark/pi-subagent-fragments` are documented
+here. This is a fork of [`@vanillagreen/pi-agents-tmux`](https://github.com/vanillagreencom/vstack/tree/main/pi-extensions/pi-agents-tmux);
+see `UPSTREAM.md` for the sync policy and `specs/` for design history.
+
+## Fork changes
+
+### 0.1.0 — 2026-08-12
+
+Initial fork release. Implemented spec 001 (multi-prompt fragment injection,
+static, spawn-time).
+
+Added:
+
+- `extensions/subagent/prompt-compose.ts` — pure helper
+  `composeAgentPrompt({body, fragments, mode, separator})` joining a body
+  string with zero or more fragment strings. v1 invariant: both `append`
+  and `replace` modes produce identical output.
+- New frontmatter fields on `AgentConfig`:
+  - `systemPromptFragments?: string[]` — paths (relative to the agent
+    file's directory) to fragment files whose contents are joined into
+    `agent.systemPrompt` at load time.
+  - `systemPromptMode?: "append" | "replace"` — accepted, recorded, and
+    inert in v1. Unknown values log a warning and fall back to `append`.
+- Both kebab-case (`system-prompt-fragments`) and camelCase
+  (`systemPromptFragments`) frontmatter keys are accepted.
+- Missing fragment paths fail agent load with a clear error that names
+  the agent file and the missing path. Empty fragment files are treated
+  as empty (no double-separator).
+- `pane.ts` and `runner.ts` spawn-time call sites import
+  `composeAgentPrompt`. In v1 both sites pass `fragments: []` because
+  load-time composition has already folded the fragments into
+  `agent.systemPrompt`; the import keeps the join rule in one place so
+  a v2 dynamic-loading layer can replace the load-time step without
+  touching the spawn sites.
+- `specs/001-multi-prompt-injection.md` — full design (background,
+  current-state analysis with file:line references, design,
+  implementation details, acceptance criteria, five-PR split plan,
+  risks, archive path).
+- `specs/README.md` — index of specs in this fork with a status
+  legend.
+- `UPSTREAM.md` — sync policy (sparse-checkout + periodic cherry-pick;
+  24h critical-fix fast-track for security / state-corruption fixes) and
+  sync history table (currently a single `initial-fork` row at upstream
+  commit `faeb65af` / version 2.8.1).
+- 19 new test cases across three new test files:
+  - `tests/prompt-compose.test.ts` (8 cases) — helper correctness.
+  - `tests/agents-fragments.test.ts` (8 cases) — load-time frontmatter
+    parsing and fragment resolution.
+  - `tests/spawn-prompt-compose.test.ts` (3 cases) — spawn-site
+    integration through `writePromptToTempFile`.
+
+Removed:
+
+- `tests/subagent-bridge-id.test.ts` — enforced a cross-package
+  contract with `pi-extensions/pi-session-bridge/`, which is not part
+  of this standalone fork's sparse-checkout. The contract is orthogonal
+  to fragment composition and belongs to upstream vstack as a whole.
+
+Deferred to v2 (see spec § 11):
+
+- Runtime switching of fragments via a `before_agent_start` hook.
+- Async / dynamic fragment loader (fragment registry).
+- Path-containment sandbox for fragment paths.
+
+Upstream baseline:
+
+- Forked from `vanillagreencom/vstack@faeb65af9319fddf4cb7528c224e259df6f40a24`
+  (`pi-agents-tmux` 2.8.1). All 2.8.1 consumer-impacting changes from
+  upstream are inherited unchanged.
+
+## Inherited from upstream `@vanillagreen/pi-agents-tmux`
+
 ## Consumer-impacting changes
 
 ### 2.8.1

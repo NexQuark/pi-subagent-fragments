@@ -1,14 +1,17 @@
 {
-  "name": "@vanillagreen/pi-agents-tmux",
-  "version": "2.8.1",
-  "description": "Pi extension for delegating work to project or user agents, including persistent tmux agent panes.",
+  "name": "@nexquark/pi-subagent-fragments",
+  "version": "0.1.0",
+  "description": "Pi extension: fragments-based systemPrompt composition for forked pi-agents-tmux agents. See specs/001-multi-prompt-injection.md.",
   "license": "MIT",
   "keywords": [
-    "pi-package",
+    "pi-extension",
     "pi",
     "coding-agent",
     "agents",
-    "tmux"
+    "tmux",
+    "fragments",
+    "systemprompt",
+    "subagent"
   ],
   "pi": {
     "extensions": [
@@ -336,14 +339,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vanillagreencom/vstack.git",
-    "directory": "pi-extensions/pi-agents-tmux"
+    "url": "https://github.com/NexQuark/pi-subagent-fragments.git"
   },
-  "homepage": "https://github.com/vanillagreencom/vstack/tree/main/pi-extensions/pi-agents-tmux",
-  "bugs": {
-    "url": "https://github.com/vanillagreencom/vstack/issues"
-  },
-  "author": "vanillagreen",
+  "homepage": "https://github.com/NexQuark/pi-subagent-fragments#readme",
+  "bugs": "https://github.com/NexQuark/pi-subagent-fragments/issues",
+  "author": "NexQuark",
   "publishConfig": {
     "access": "public"
   },
@@ -360,5 +360,13 @@
     "@earendil-works/pi-tui": {
       "optional": true
     }
+  },
+  "forkedFrom": {
+    "upstream": "vanillagreencom/vstack",
+    "upstreamPath": "pi-extensions/pi-agents-tmux/",
+    "sourceCommit": "faeb65af9319fddf4cb7528c224e259df6f40a24",
+    "sourceVersion": "2.8.1",
+    "forkDate": "2026-08-12",
+    "license": "MIT"
   }
 }

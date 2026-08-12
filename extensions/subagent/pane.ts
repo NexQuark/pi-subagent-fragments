@@ -6,6 +6,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { atomicWriteFile } from "./file-lock.js";
 import type { AgentConfig } from "./agents.js";
+import { composeAgentPrompt } from "./prompt-compose.js";
 import { delay, paneSessionModeToRecordMode } from "./format.js";
 import { safeFileName, shellQuote } from "./names.js";
 import {
@@ -724,7 +725,11 @@ export async function writeLauncher(
 	const promptFile = path.join(promptsDir, `${safeName}.md`);
 	const launcherFile = path.join(launchersDir, `${safeName}.sh`);
 
-	await atomicWriteFile(promptFile, agent.systemPrompt);
+	await atomicWriteFile(promptFile, composeAgentPrompt({
+		body: agent.systemPrompt,
+		fragments: [],
+		mode: agent.systemPromptMode ?? "append",
+	}));
 
 	const args = ["--name", agent.name, "--session", sessionFile, "--append-system-prompt", promptFile];
 	const bridgeExtension = settingBoolean("forceSessionBridgeForPanes", true, cwd) ? resolveSessionBridgeExtension(cwd) : undefined;
