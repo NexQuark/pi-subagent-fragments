@@ -1826,7 +1826,7 @@ export default function (pi: ExtensionAPI) {
 	// event.systemPrompt). Keyed by session name (A1), consumes the
 	// inject/<agent>.json state one-shot and installs the composed prompt.
 	registerInjectionHook(pi, {
-		runtimeRootForContext: (ctx) => sessionRuntimeDir(runtimeSessionId(ctx as ExtensionContext)),
+		runtimeRootForContext: (ctx) => sessionRuntimeDir(runtimeSessionId(ctx)),
 	});
 
 	pi.registerTool({
