@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Approved — R1/R2/R3 Implemented (TDD via sub-tmux), R4 (docs) pending |
+| **Status** | Implemented (released in v0.4.0; verdict in `specs/_reviews/_pr18-1.md`) |
 | **Target version** | `0.4.0` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack` (unchanged since spec 004) |

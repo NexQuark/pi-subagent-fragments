@@ -6,6 +6,29 @@ see `UPSTREAM.md` for the sync policy and `specs/` for design history.
 
 ## Fork changes
 
+### 0.4.0 — 2026-08-13
+
+Implemented spec 005 (structured tool prompting — retire APPEND_SYSTEM.md):
+
+- **Per-tool structured prompting (R1)** — all seven tools
+(`subagent`, `delegate_subagent`, `steer_subagent`,
+`get_subagent_result`, `wait_for_subagent_idle`, `stop_subagent`,
+`complete_subagent`) carry `promptSnippet` + curated `promptGuidelines`.
+Pi appends the guidelines only while the tool is active and applies them
+to child agents too — no global APPEND_SYSTEM.md text, no main/child
+asymmetry, no unconditional token cost.
+- **APPEND_SYSTEM.md channel retired (R2)** — removed `pi.appendSystem`,
+`scripts/append-system.mjs`, and the `postinstall`/`preuninstall` hooks;
+local `~/.pi/agent/APPEND_SYSTEM.md` block cleaned. No new installs write
+it.
+- **Optional usage skill (R3)** — the full calling rules ship as
+`skills/subagent-usage/SKILL.md` (Pi frontmatter + complete rules), are
+packaged but **never auto-installed**; README documents manual install
+into the user skills dir.
+- **Docs (R4)** — README: simplified install command (no more
+`--allow-scripts`), new "Structured tool prompting & optional skill"
+section; orphan `instructions.md` dropped (N1).
+
 ### 0.3.1 — 2026-08-13
 
 Implemented spec 004 (post-v0.3.0 hardening batch):
