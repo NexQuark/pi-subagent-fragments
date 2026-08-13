@@ -6,6 +6,31 @@ see `UPSTREAM.md` for the sync policy and `specs/` for design history.
 
 ## Fork changes
 
+### 0.3.1 — 2026-08-13
+
+Implemented spec 004 (post-v0.3.0 hardening batch):
+
+- **Running agent instance cap (R6)** — `/agents:new`/`/agents:start` refuse
+to launch once `maxAgents` (default 40, configurable via
+`vstack.extensionManager.config["@nexquark/pi-subagent-fragments"].maxAgents`;
+`<= 0` = unlimited) running instances are met. Count = live panes +
+queued/running bg one-shots; dead/terminal excluded; friendly error with
+count + resource breakdown + both remediations. Management ops and
+predefined inventory never capped.
+- **File-lock diagnostics (R2)** — `FileLockTimeoutError` carries the
+holder (`held by pid … on … since …`) from owner.json; exponential retry
+backoff (doubling, capped 32×).
+- **Inject hook typing + friendly ENOENT (R3)** — hook handler typed with
+`BeforeAgentStartEvent`/`ExtensionContext`/`BeforeAgentStartEventResult`
+(no `any`); `runToolInject` file sources error with resolved path and
+ENOENT distinction.
+- **Name-only ad-hoc contract (R1)** — `/agents:new|start <name>` with no
+sources is valid (empty task); handler-level tests lock it.
+- **E2E (R4)** — `e2e/e2e-002.mjs` (ad-hoc full grammar → synthesize →
+launcher) and `e2e/e2e-003.mjs` (real pi child fires the fork's
+`before_agent_start` hook: one-shot consume, on-apply history, 2nd-turn
+no re-inject).
+
 ### 0.3.0 — 2026-08-12
 
 Implemented spec 003 (runtime prompt injection). Adds `/agents:inject` and
