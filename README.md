@@ -81,6 +81,15 @@ tokens you don't want interpreted:
 /agents:new dba --model gpt-4o "audit the schema" -- --verbose --output ./report
 ```
 
+> **Everything except `<name>` is optional.** `/agents:new <name>` (and
+> `/agents:start <name>`) with no sources and no flags is valid: the agent
+> starts with an empty task and decides its own next action (it may ask
+> what to do). The minimal invocation is just the name:
+>
+> ```text
+> /agents:new explorer
+> ```
+
 ### Full worked example
 
 One command exercising every source type and most flags (all four source
