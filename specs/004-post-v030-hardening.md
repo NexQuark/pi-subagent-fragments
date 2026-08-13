@@ -109,6 +109,40 @@ R3b asserting the friendly error.
 
 **Status**: Implemented (e2e-002 `b4b05b4`, e2e-003 `3cb4372`).
 
+### R6 — Running agent instance cap (default 40, configurable)
+
+**Contract** (user-confirmed 2026-08-13): cap the number of **running agent
+instances** (not the predefined inventory). When the threshold is reached,
+`/agents:new` / `/agents:start` refuse to launch another instance and return
+a friendly error; management operations stay unrestricted; predefined agent
+count is unrestricted.
+
+**Scope of the count**: running instances = live panes + running/queued bg
+one-shots (pane registry live entries + task registry queued/running
+records). Counted at dispatch time in the `new`/`start` handler (both pane
+and `--no-pane` lanes).
+
+**Default / config**: `maxAgents` via `settingNumber("maxAgents", 40)`
+(settings `vstack.extensionManager.config["@nexquark/pi-subagent-fragments"].maxAgents`);
+`<= 0` = unlimited (backward compat with current behavior).
+
+**Over-limit error** (must contain, per user): the current instance count
+and resource summary (N running: M panes, K bg), plus the two remediations —
+end idle agents (`/agents:stop <name>`) or raise the value
+(`maxAgents` config path).
+
+**Unrestricted** (explicit): management ops (`stop`/`status`/`attach`/
+`send`/`trace`/`toggle`) never blocked; predefined agent definitions never
+capped; ad-hoc synthesized agents count as instances (they occupy a pane/
+bg lane) but are not capped at definition time.
+
+**Tests**: unit — guard blocks new/start over cap (both lanes), count
+excludes stopped/dead instances, config override (`0` = unlimited / N
+applies), friendly error text carries count + remediation; management ops
+unblocked at cap.
+
+**Status**: Planned (user-confirmed design; TDD assign).
+
 ### R5 — Documentation updates (mostly landed)
 
 | Item | Commit |
@@ -151,6 +185,7 @@ table when they need action tracking.
 - [ ] R2: timeout errors carry holder info; backoff in place; suite green.
 - [ ] R3: hook params typed; friendly ENOENT; suite green.
 - [x] R4: e2e-002 and e2e-003 pass against the installed package.
+- [ ] R6: new/start blocked over instance cap (both lanes) with friendly error; config override; management ops unblocked.
 - [ ] Spec 004 archived with Status Implemented at v0.3.1; README index updated.
 
 ## 6. Revision history
@@ -158,3 +193,4 @@ table when they need action tracking.
 | Version | Date | Change |
 |---------|------|--------|
 | v1.0 | 2026-08-13 | Initial draft — R1-R5 + open findings tracker |
+| v1.1 | 2026-08-13 | R6 added (running agent instance cap, default 40, configurable) — user-confirmed scope (instances, not inventory; management/predefined unrestricted) |
