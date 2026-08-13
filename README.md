@@ -284,21 +284,41 @@ minor version (`npm publish` is never used).
 ```bash
 cd /home/openatom/codes/repos/pi-subagent-fragments
 npm pack                      # → nexquark-pi-subagent-fragments-<ver>.tgz
-npm install -g --allow-scripts=@nexquark/pi-subagent-fragments ./nexquark-pi-subagent-fragments-<ver>.tgz
-```
-
-The `--allow-scripts` flag is required on npm ≥ 10.4 (install-scripts
-gate); it lets the package's `postinstall` (`append-system.mjs install`)
-refresh `~/.pi/agent/APPEND_SYSTEM.md`. If it was skipped, run it once
-manually from the global package dir:
-
-```bash
-cd "$(npm root -g)/@nexquark/pi-subagent-fragments" && node scripts/append-system.mjs install
+npm install -g ./nexquark-pi-subagent-fragments-<ver>.tgz
 ```
 
 `settings.json` keeps the `npm:@nexquark/pi-subagent-fragments` entry
 unchanged — the `npm:` prefix resolves to the freshly installed global
 package. **Restart Pi** for the new version to load.
+
+## Structured tool prompting & optional skill (spec 005)
+
+This package does **not** inject anything into `APPEND_SYSTEM.md`. Tool
+usage rules are shipped two ways:
+
+1. **Structured per-tool prompting (always on).** Each tool definition
+   (`subagent`, `delegate_subagent`, `steer_subagent`,
+   `get_subagent_result`, `wait_for_subagent_idle`, `stop_subagent`,
+   `complete_subagent`) carries a `promptSnippet` (one-line Available-tools
+description) and `promptGuidelines` (core calling rules). Pi appends the
+guidelines only while the tool is active, and they apply to **child
+agents too** — no global text, no main/child asymmetry.
+2. **Optional skill (never auto-installed).** The full calling rules
+   (bg vs pane lanes, session reuse, timeouts, context-overflow retries,
+   pane-cwd-stale, best practices) ship as
+   [`skills/subagent-usage/SKILL.md`](./skills/subagent-usage/SKILL.md).
+   Install it manually only if you want the complete rules in-prompt:
+
+   ```bash
+   # copy into your user skills dir (create it if needed)
+   mkdir -p ~/.pi/agent/skills
+   cp -r "$(npm root -g)/@nexquark/pi-subagent-fragments/skills/subagent-usage" \
+         ~/.pi/agent/skills/
+   ```
+
+   (Exact skills-directory layout follows Pi's current skills mechanism;
+   project-level installs go under the project's `.pi/skills`.) The skill
+   is **not** installed or loaded by the package itself.
 
 ## Known limitations (v1)
 
