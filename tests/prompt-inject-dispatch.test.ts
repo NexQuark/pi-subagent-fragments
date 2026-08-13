@@ -34,9 +34,9 @@ afterAll(() => {
 	for (const dir of tmpDirs) rmSync(dir, { force: true, recursive: true });
 });
 
-type HookHandler = (event: { systemPrompt: string }, ctx: { sessionManager: { getSessionName: () => string } }) => Promise<{ systemPrompt: string } | null>;
+type HookHandler = (event: { systemPrompt: string }, ctx: { sessionManager: { getSessionName: () => string } }) => Promise<{ systemPrompt: string } | undefined>;
 
-function captureInjectionHook(runtimeRoot: string): { handlers: Map<string, HookHandler>; pi: any; invoke: (sessionName: string, systemPrompt: string) => Promise<{ systemPrompt: string } | null> } {
+function captureInjectionHook(runtimeRoot: string): { handlers: Map<string, HookHandler>; pi: any; invoke: (sessionName: string, systemPrompt: string) => Promise<{ systemPrompt: string } | undefined> } {
 	const handlers = new Map<string, HookHandler>();
 	const pi = { on: (name: string, handler: HookHandler) => handlers.set(name, handler) };
 	registerInjectionHook(pi as any, { runtimeRootForContext: () => runtimeRoot });
@@ -100,7 +100,7 @@ describe("inject hook consume (spec 003 PR 11)", () => {
 		expect(await readInjectionState(rt, "childAgent")).toBeNull();
 		// 2nd turn: state is gone → no re-inject.
 		const second = await hook.invoke("childAgent", "child-base" + SEP + "SURGEON");
-		expect(second).toBeNull();
+		expect(second).toBeUndefined();
 	});
 
 	test("A1: hook keyed by session name — other session untouched", async () => {
@@ -109,7 +109,7 @@ describe("inject hook consume (spec 003 PR 11)", () => {
 		const hook = captureInjectionHook(rt);
 		// Invoke for a different session name → no-op, childA state intact.
 		const res = await hook.invoke("childB", "B-base");
-		expect(res).toBeNull();
+		expect(res).toBeUndefined();
 		expect(await readInjectionState(rt, "childA")).not.toBeNull();
 	});
 

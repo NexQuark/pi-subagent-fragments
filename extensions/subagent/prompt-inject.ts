@@ -12,12 +12,13 @@
  * duplicated path construction.
  */
 
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { safeFileName } from "./names.js";
 import { composeAgentPrompt, DEFAULT_PROMPT_SEPARATOR } from "./prompt-compose.js";
 import { PromptHistory, promptHistoryPathFor } from "./prompt-history.js";
 import type { AdhocSystemSource } from "./agents-command.js";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { BeforeAgentStartEvent, BeforeAgentStartEventResult, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export type InjectMode = "replace" | "append" | "add";
 
@@ -227,12 +228,24 @@ export async function runToolInject(input: ToolInjectInput): Promise<string> {
 		return `Rolled back ${name} to version ${n} (bytes=${bytes}).`;
 	}
 
-	const mode = input.mode ?? "append";
+	const modeRaw = input.mode ?? "append";
+	// history/rollback returned above, so the mutation mode can never be either;
+	// narrow the union so writeInjectionState's mode param accepts it.
+	const mode: "replace" | "append" | "add" = modeRaw === "history" || modeRaw === "rollback" ? "append" : modeRaw;
 	// Resolve sources → fragments (file content read at resolution root).
 	const root = input.cwd ?? process.cwd();
-	const { readFileSync } = await import("node:fs");
-	const { resolve } = await import("node:path");
-	const fragments = (input.sources ?? []).map((s) => (s.kind === "string" ? s.value : readFileSync(resolve(root, s.value), "utf8")));
+	const fragments = (input.sources ?? []).map((s) => {
+		if (s.kind === "string") return s.value;
+		const filePath = resolve(root, s.value);
+		try {
+			return readFileSync(filePath, "utf8");
+		} catch (err) {
+			const code = (err as NodeJS.ErrnoException | undefined)?.code;
+			throw new Error(
+				`inject: file source "${s.value}" ${code === "ENOENT" ? "not found" : "unreadable"} (resolved to "${filePath}" relative to root "${root}")`,
+			);
+		}
+	});
 	const bytes = fragments.reduce((n, f) => n + Buffer.byteLength(f, "utf-8"), 0);
 	await writeInjectionState(input.runtimeRoot, name, { mode, fragments });
 	const hlen = hist.list().length;
@@ -242,7 +255,7 @@ export async function runToolInject(input: ToolInjectInput): Promise<string> {
 
 export interface InjectionHookDeps {
 	/** Derive the session runtime root from the hook ctx (OQ2). */
-	runtimeRootForContext: (ctx: unknown) => string;
+	runtimeRootForContext: (ctx: ExtensionContext) => string;
 }
 
 /**
@@ -250,16 +263,22 @@ export interface InjectionHookDeps {
  * `ctx.sessionManager.getSessionName()` (round 1 review A1). Chains cleanly
  * beside the existing agent-list handler (pi calls each listener with the
  * evolving chained `event.systemPrompt`).
+ *
+ * Uses the pi-exported `BeforeAgentStartEvent`/`ExtensionContext` types so an
+ * upstream API change is a compile-time failure, not a runtime crash (PR 11
+ * F1). installPendingInjection returns null when nothing is pending; the
+ * hook contract wants void in that case, so map null → undefined.
  */
 export function registerInjectionHook(pi: ExtensionAPI, deps: InjectionHookDeps): void {
-	pi.on("before_agent_start", async (event: any, ctx: any) => {
-		const sessionName = ctx?.sessionManager?.getSessionName?.();
+	pi.on("before_agent_start", async (event: BeforeAgentStartEvent, ctx: ExtensionContext): Promise<BeforeAgentStartEventResult | void> => {
+		const sessionName = ctx.sessionManager.getSessionName();
 		if (!sessionName) return;
 		const runtimeRoot = deps.runtimeRootForContext(ctx);
-		return await installPendingInjection({
+		const result = await installPendingInjection({
 			runtimeRoot,
 			sessionName,
-			eventSystemPrompt: event?.systemPrompt ?? "",
+			eventSystemPrompt: event.systemPrompt,
 		});
+		return result ?? undefined;
 	});
 }
