@@ -81,6 +81,33 @@ tokens you don't want interpreted:
 /agents:new dba --model gpt-4o "audit the schema" -- --verbose --output ./report
 ```
 
+### Full worked example
+
+One command exercising every source type and most flags (all four source
+kinds contribute in one invocation):
+
+```text
+/agents:new dba \
+  #./role/base-dba.md \                            # system file (must exist)
+  #"./style.md" "be terse" \                       # system: file-or-inline
+  @./tasks/billing-audit.md \                      # user: file-or-inline
+  "audit the schema for the billing service" \     # user inline (the task)
+  --model gpt-4o \
+  --cwd /srv/billing \
+  --pane-direction v --pane-size 60% \
+  --no-pane \
+  -- --verbose --output ./report                   # passthrough after `--`
+```
+
+Sources: `#<path>` and `#"..."` contribute to the agent's `systemPrompt`;
+`@<path>` and `"..."` become the dispatched user prompt (the task). File
+sources are read at launch; inline values are joined with `---` separators.
+The minimal form is just a name plus a quoted task:
+
+```text
+/agents:new reviewer "review the auth flow in src/auth.ts"
+```
+
 ### `/agents:new` vs `/agents:start`
 
 - `/agents:new` always starts a fresh pane (equivalent to `--new-pane`).

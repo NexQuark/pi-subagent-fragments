@@ -206,6 +206,10 @@ Broker publication is isolated in `extensions/subagent/activity.ts` and must sta
 
 Status legend per row: live pane, startable, stale, background. Dashboard rows: queued, working, completed, needs completion, failed/blocked.
 
+## Review trail files (`specs/_reviews/`)
+
+Review/verdict files under `specs/_reviews/` (e.g. `_pr10-1.md`, `_003-reviewer-consent.md`) are **kept untracked on purpose** — they never get committed to the repo. They are the working transcript of the charter TDD review cycle and live only on the local machine (user decision). When a spec is archived, the spec file itself carries the consolidated review history (revision-history rows + Status), so the archived spec remains the durable record.
+
 ## Pane registry mechanics
 
 Pane registries and task records are stored in sidecar files and mirrored into session custom entries only when the snapshot changes AND the session file's on-disk leaf still matches the active in-memory leaf. This prevents duplicate / orphaned Pi processes from advancing an older branch and making `/resume` land before the latest visible turns.
