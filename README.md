@@ -19,18 +19,29 @@ critical-fix fast-track rules.
 
 ## What this fork adds
 
-A `systemPromptFragments?: string[]` frontmatter field on agent definitions,
-plus a `composeAgentPrompt()` helper that joins the body and fragments into
-the temp file passed to `--append-system-prompt` at spawn time.
+Beyond upstream `pi-agents-tmux`, this fork adds four feature areas (each
+designed in `specs/` and shipped as a minor version):
 
-- **Static composition only in v1** — fragments are joined once at agent
-  spawn and remain immutable for the session lifetime.
-- **Runtime switching deferred to v2** — see
-  [specs/001-multi-prompt-injection.md § Deferred](./specs/001-multi-prompt-injection.md#11-deferred-features-v2).
+1. **Multi-prompt fragment injection (v0.1.0, spec 001)** — a
+   `systemPromptFragments?: string[]` frontmatter field on agent
+definitions, plus a `composeAgentPrompt()` helper that joins the body
+and fragments into the temp file passed to `--append-system-prompt` at
+spawn time.
+2. **Ad-hoc pane agent launch (v0.2.0, spec 002)** — `/agents:new` /
+   `/agents:start` synthesize an in-memory agent (no `.md` file needed)
+   with call-time system/user sources and pane geometry flags.
+3. **Runtime prompt injection (v0.3.0, spec 003)** — `/agents:inject`
+   and the `subagent` tool `inject` param mutate a running agent's
+   system prompt (replace/append/rollback/history).
+4. **Hardening batch (v0.3.1, spec 004)** — running-agent instance cap
+   (default 40, configurable), file-lock timeout diagnostics, typed
+   inject hook + friendly file-source errors, name-only ad-hoc contract,
+   and real-process e2e coverage.
 
 For the full design, API surface, lifecycle, configuration, errors,
 testing, and migration path, see
-[`specs/001-multi-prompt-injection.md`](./specs/001-multi-prompt-injection.md).
+[`specs/001-multi-prompt-injection.md`](./specs/001-multi-prompt-injection.md)
+and the other specs in [`specs/`](./specs/README.md).
 
 ## Ad-hoc pane agent launch (`/agents:new` / `/agents:start`)
 
@@ -206,6 +217,37 @@ dir (`~/.pi/agent/vstack/sessions/<sessionId>/pi-subagent-fragments/`).
 
 For the full design, see
 [`specs/003-prompt-inject.md`](./specs/003-prompt-inject.md).
+
+## Running agent instance cap (spec 004 R6)
+
+`/agents:new` and `/agents:start` refuse to launch another instance once a
+configurable number of **running agent instances** is met. The cap counts
+live panes plus queued/running background one-shots (stopped/dead panes
+and finished tasks are not counted); it does **not** cap how many agents
+are defined in the inventory, and it never blocks management operations
+(`/agents:stop`, `/agents:status`, `/agents:attach`, `/agents:send`, …).
+
+```jsonc
+// ~/.pi/agent/settings.json (or trusted project .pi/settings.json)
+{
+  "vstack": {
+    "extensionManager": {
+      "config": {
+        "@nexquark/pi-subagent-fragments": { "maxAgents": 40 }
+      }
+    }
+  }
+}
+```
+
+- **Default**: `40`. Set `maxAgents` to any positive number, or `<= 0` to
+disable the cap entirely.
+- **Over-limit behavior**: the launch is refused with a friendly error
+naming the current count (`N running: M panes, K bg`), plus the two
+remediations — end idle agents (`/agents:stop <name>`) or raise
+`maxAgents`.
+- Reusing a live pane (plain `/agents:start` on an already-running agent)
+creates no new instance and is not capped.
 
 ## Install
 
