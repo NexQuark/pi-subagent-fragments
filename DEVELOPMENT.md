@@ -221,7 +221,7 @@ branch, parallel-suite file-lock contention).
 | Role | main | feat branches | merges/squash | worktrees |
 |---|---|---|---|---|
 | sub-meta | owns (docs/release/merge only) | reads | **only sub-meta** | **fixed `…-meta` worktree (checkout main)** |
-| sub-tmux | reads | owns (development) | never | shared tree (dev only) |
+| sub-tmux | reads | owns (development) | never | **fixed `…-dev` worktree** |
 | reviewer | reads | reads | never | read-only temp only |
 
 ### Fixed worktree split (mechanism, not discipline)
@@ -229,16 +229,23 @@ branch, parallel-suite file-lock contention).
 The shared tree is a **globally mutable checkout** — any session switching
 branches re-points every other session's next commit. Relying on
 "check the branch before committing" failed three times. The fix is
-structural:
+structural, and was hardened further on 2026-08-13 (**every agent works
+in its own dedicated worktree**; the shared tree is no longer used for
+branch switching at all):
 
-- **`…/pi-subagent-fragments` (shared tree): sub-tmux owns the checkout**
-  (development branches only). sub-meta never checks it out, never
-  commits in it.
+- **`…/pi-subagent-fragments` (shared tree): neutral / read-only.** No
+  agent switches branches or commits here. It is the canonical checkout
+  for reading and for anything that must run from the repo root; all
+  development happens in the dedicated worktrees below.
 - **`…/pi-subagent-fragments-meta`: sub-meta's fixed worktree, checked out
   to `main` permanently.** All sub-meta writes (docs, specs, README,
   CHANGELOG, release commits) happen here — edit files under this path,
   commit here. Being permanently on `main`, a misplaced commit is
   structurally impossible.
+- **`…/pi-subagent-fragments-dev`: sub-tmux's fixed worktree.** All
+  development happens here — create/checkout feat branches in this
+  worktree, never in the shared tree. Branch switches by sub-tmux no
+  longer affect sub-meta's meta worktree.
 - **Temp worktrees** (`/tmp/…`): reviews, squash merges, suite/e2e runs.
   Read-only for reviewer; sub-meta merges from here.
 

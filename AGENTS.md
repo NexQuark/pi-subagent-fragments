@@ -9,17 +9,22 @@
 ## Collaborative development protocol (multi-agent, shared worktree)
 
 This repo is developed by multiple Pi agents (sub-meta / sub-tmux /
-review-subagent-tmux) sharing **one git worktree**. The branch & worktree
-protocol in [`DEVELOPMENT.md` § "Branch & worktree protocol"](./DEVELOPMENT.md)
+review-subagent-tmux) each working in a **dedicated git worktree**. The
+branch & worktree protocol in
+[`DEVELOPMENT.md` § "Branch & worktree protocol"](./DEVELOPMENT.md)
 **binds every agent session working in this repo** — read it before any
 git operation. Non-negotiable highlights:
 
+- **Each agent works in its own fixed worktree** — sub-meta:
+  `…-meta` (checked out to `main`), sub-tmux: `…-dev`, reviewer: read-only
+  temp worktrees. The shared tree `…/pi-subagent-fragments` is neutral
+  and read-only: **no agent switches branches or commits there**.
 - **Check `git branch --show-current` before every commit** — a commit made
-  while a peer has switched the shared checkout lands on their branch
-  (happened three times).
-- **Only sub-meta commits to `main`**, and only from a temporary worktree
-  (`git worktree add /tmp/… main`); sub-tmux never merges/squashes/pushes
-  to main; reviewer is read-only (its only writes are its own untracked
+  while a peer has switched a shared checkout lands on their branch
+  (happened three times; the dedicated worktrees make this impossible).
+- **Only sub-meta commits to `main`**, and only from the `…-meta` worktree
+  (or a temp worktree); sub-tmux never merges/squashes/pushes to main;
+  reviewer is read-only (its only writes are its own untracked
   `specs/_reviews/` verdict files).
 - **Reviews, squash merges, suite runs, and e2e runs happen in temporary
   worktrees** — never check out the shared tree's branch mid-task, never
