@@ -13,16 +13,16 @@
  * exist. Expect 4 fail.
  */
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	acquireFileLock,
 	backoffDelayMs,
 	FileLockTimeoutError,
 	isFileLockTimeoutError,
 	setFileLockOptionsForTests,
+	withCrossProcessFileLock,
 } from "../file-lock.js";
 
 const tmpDirs: string[] = [];
@@ -52,7 +52,9 @@ describe("file-lock diagnostics (A1)", () => {
 		}, 15);
 		setFileLockOptionsForTests({ staleMs: 120, retryMs: 5, timeoutMs: 80 });
 		try {
-			await expect(acquireFileLock(filePath)).rejects.toThrow(/held by pid 12345 on holder-host since 1700000000000/);
+			// withCrossProcessFileLock applies fileLockOptionsForTests to the
+			// underlying acquire; the fn is unreachable because acquire throws.
+			await expect(withCrossProcessFileLock(filePath, async () => undefined)).rejects.toThrow(/held by pid 12345 on holder-host since 1700000000000/);
 		} finally {
 			clearInterval(touch);
 			setFileLockOptionsForTests(undefined);
@@ -69,7 +71,7 @@ describe("file-lock diagnostics (A1)", () => {
 		}, 15);
 		setFileLockOptionsForTests({ staleMs: 120, retryMs: 5, timeoutMs: 80 });
 		try {
-			await expect(acquireFileLock(filePath)).rejects.toThrow(/^Timed out acquiring file lock for .* after \d+ms$/);
+			await expect(withCrossProcessFileLock(filePath, async () => undefined)).rejects.toThrow(/^Timed out acquiring file lock for .* after \d+ms$/);
 		} finally {
 			clearInterval(touch);
 			setFileLockOptionsForTests(undefined);
