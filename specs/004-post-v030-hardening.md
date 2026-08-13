@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Draft |
+| **Status** | Approved — R1/R2/R3 Implemented (v0.3.1 batch), R4/R5 pending |
 | **Target version** | `0.3.1` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack` (unchanged since spec 003) |
@@ -52,8 +52,7 @@ and decides its own next action.
 name-only invocation dispatches an empty task without error, in both
 pane and bg lanes).
 
-**Status**: Implemented (behavior) — test coverage pending (assigned to
-sub-tmux, TDD).
+**Status**: Implemented (behavior + tests landed @ `7c7bfdd`).
 
 ### R2 — File-lock diagnostics (contention root-cause visibility)
 
@@ -76,7 +75,7 @@ info appears in timeout error (accelerated via
 `setFileLockOptionsForTests`); backoff behavior; `isFileLockTimeoutError`
 compat.
 
-**Status**: In progress (assigned to sub-tmux, TDD).
+**Status**: Implemented @ `1f1c24e`.
 
 ### R3 — Inject hook typing + friendly file-source error
 
@@ -96,7 +95,7 @@ the slash-side style.
 **Tests**: typecheck for R3a (compile layer); execute-capture test for
 R3b asserting the friendly error.
 
-**Status**: In progress (assigned to sub-tmux, TDD).
+**Status**: Implemented @ `a07aa22`.
 
 ### R4 — E2E coverage for spec 002 and spec 003
 
@@ -128,8 +127,8 @@ R3b asserting the friendly error.
 
 | ID | Origin | Description | Disposition |
 |----|--------|-------------|-------------|
-| F-01 | PR 12 F1 | `runToolInject` file source throws bare ENOENT | In progress → R3b |
-| F-02 | PR 11 F1 | inject hook params typed `any` | In progress → R3a |
+| F-01 | PR 12 F1 | `runToolInject` file source throws bare ENOENT | Closed — fixed `a07aa22` (R3b friendly error) |
+| F-02 | PR 11 F1 | inject hook params typed `any` | Closed — fixed `a07aa22` (R3a typed hook) |
 | F-03 | PR 12 F2 | tool-side inject does not require live pane (deliberate, wider semantics) | Closed — by design, documented (README) |
 | F-04 | F3 review | inject combined with agent/task/tasks/chain silently ignored | Closed — fixed `0e1f455` (standalone-only guard) |
 | F-05 | post-F3 runs | Transient 15 fail / 14 error under shared-worktree parallel test runs (file-lock contention) | Open — mitigated by R2 diagnostics; monitor |
