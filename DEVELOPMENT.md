@@ -206,6 +206,70 @@ Broker publication is isolated in `extensions/subagent/activity.ts` and must sta
 
 Status legend per row: live pane, startable, stale, background. Dashboard rows: queued, working, completed, needs completion, failed/blocked.
 
+## Branch & worktree protocol (shared-worktree collaboration)
+
+This fork is developed by multiple Pi agents sharing **one main git
+worktree** (`/home/openatom/codes/repos/pi-subagent-fragments`) plus
+throwaway `git worktree add` copies. Checkout/branch operations are
+**global** across the shared tree — the rules below prevent the incidents
+we actually hit (commits landing on the wrong branch twice, checkout
+wiping a peer's uncommitted edits, inability to force-update a checked-out
+branch, parallel-suite file-lock contention).
+
+### Roles
+
+| Role | main | feat branches | merges/squash | worktrees |
+|---|---|---|---|---|
+| sub-meta | owns (docs/release/merge only) | reads | **only sub-meta** | manages |
+| sub-tmux | reads | owns (development) | never | own dev only |
+| reviewer | reads | reads | never | read-only temp only |
+
+### Hard rules
+
+1. **Check branch before every commit.** `git branch --show-current` must
+   match your intent. A commit made while a peer has switched the shared
+   worktree lands on *their* branch (happened twice).
+2. **Only sub-meta commits to `main`**, and only from a temporary worktree
+   (`git worktree add /tmp/… main`), never by checking out main in the
+   shared tree. sub-tmux never merges/squashes/pushes to main.
+3. **Temporary worktrees for anything that could touch shared state:**
+   reviews, squash merges, suite runs, e2e runs. Add, use, `--force`
+   remove. Never run a full suite in the shared tree while a peer is
+   running one (file-lock contention → transient fails).
+4. **No force-update of a branch checked out by any worktree.**
+   `git branch -f <branch>` fails while a worktree has it checked out;
+   instead reset it from an independent worktree after the holder
+   switches away, or leave it and coordinate.
+5. **Broadcast before switching the shared checkout.** Send an intercom
+   note ("switching shared worktree to X") so peers know a checkout
+   change is imminent; confirm the tree is clean of *their* uncommitted
+   edits first (`git status --short`, ignoring `??` untracked).
+6. **Uncommitted edits belong to the current checkout owner.** If you must
+   switch branches while a peer has uncommitted changes, coordinate
+   (they stash/commit) — never switch over them (lost edits once).
+7. **Push after each completed unit of work** on a feat branch; keep
+   source branches after squash (never delete them from origin; local
+   cleanup optional with coordination).
+8. **One squash per PR**, message = `feat|docs|test(<area>): <PR> — …`,
+   with the spec requirement id (e.g. "(spec 004 R2)") in the subject.
+   Squash in a temp worktree; commit each squash separately before the
+   next (`git merge --squash` stages onto the previous one otherwise).
+9. **`git status --short` before/after checkout** in the shared tree;
+   untracked `??` files (smoke/, specs/_reviews/) are expected and not
+   a problem.
+
+### Commit placement failure recovery
+
+If a commit lands on the wrong branch (shared-worktree switch):
+
+1. Identify the commit (it is not on `main`).
+2. Rebuild onto `main` without touching the shared tree:
+   `git commit-tree <sha>^{tree} -p main -m "<msg>"` (pure ref) or
+   cherry-pick from an independent worktree.
+3. Reset the polluted branch to its remote copy
+   (`git branch -f <branch> origin/<branch>`) once no worktree holds it.
+4. Tell the branch owner.
+
 ## Review trail files (`specs/_reviews/`)
 
 Review/verdict files under `specs/_reviews/` (e.g. `_pr10-1.md`, `_003-reviewer-consent.md`) are **kept untracked on purpose** — they never get committed to the repo. They are the working transcript of the charter TDD review cycle and live only on the local machine (user decision). When a spec is archived, the spec file itself carries the consolidated review history (revision-history rows + Status), so the archived spec remains the durable record.
