@@ -19,7 +19,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionCommandContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -27,7 +27,7 @@ import { registerAgentsCommands } from "../extensions/subagent/agents-command.js
 import { setSingleAgentSpawnForTests } from "../extensions/subagent/runner.js";
 import { setPaneExecCaptureForTests } from "../extensions/subagent/pane.js";
 import { runtimeSessionId, sessionRuntimeDir } from "../extensions/subagent/settings.js";
-import { registryPath } from "../extensions/subagent/paths.js";
+import { inboxDir, registryPath } from "../extensions/subagent/paths.js";
 import { injectStatePathFor } from "../extensions/subagent/prompt-inject.js";
 import { promptHistoryPathFor } from "../extensions/subagent/prompt-history.js";
 
@@ -443,5 +443,52 @@ describe("adhoc handler inject (spec 003 PR 10)", () => {
 		const state = JSON.parse(readFileSync(injectStatePathFor(handlerRuntimeRoot(), "injectRoll"), "utf8"));
 		expect(state.mode).toBe("rollback");
 		expect(state.fragments).toEqual(["BASE"]);
+	});
+});
+
+describe("adhoc name-only empty task (spec 003 post contract)", () => {
+	// Read the sole delegation task file written to the agent's inbox dir and
+	// assert the task segment is EMPTY (compactTask="" — name-only launch).
+	function readPaneTaskFile(agent: string): string {
+		const inbox = inboxDir(handlerRuntimeRoot(), agent);
+		const md = readdirSync(inbox).find((f) => f.endsWith(".md"));
+		expect(md).toBeDefined();
+		return readFileSync(join(inbox, md!), "utf8");
+	}
+
+	function emptyTaskSegment(delegation: string): string {
+		const match = delegation.match(/Task ID: \S+\n([\s\S]*?)When done/);
+		return match ? match[1]!.trim() : delegation;
+	}
+
+	test("/agents:new <name> name-only → bg lane (empty task, no throw)", async () => {
+		delete process.env.TMUX;
+		const countSpawns = mockBgSpawn();
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:new"], "adhoc-nb --no-pane");
+		expect(content).toContain("Dispatched as bg");
+		expect(countSpawns()).toBe(1);
+	});
+
+	test("/agents:start <name> name-only → pane lane records an EMPTY task", async () => {
+		process.env.TMUX = "/tmp/tmux-no1,12345,0";
+		installStatefulTmuxMock();
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:start"], "adhoc-no1");
+		expect(content).toContain("Started ad-hoc pane");
+		const delegation = readPaneTaskFile("adhoc-no1");
+		expect(delegation).toContain("Task for adhoc-no1");
+		expect(emptyTaskSegment(delegation)).toBe("");
+	});
+
+	test("/agents:new <name> name-only → pane lane records an EMPTY task", async () => {
+		process.env.TMUX = "/tmp/tmux-no2,12345,0";
+		installStatefulTmuxMock();
+		const { handlers } = captureHandlers();
+		const content = await invoke(handlers["agents:new"], "adhoc-no2");
+		expect(content).toContain("Started ad-hoc pane");
+		const delegation = readPaneTaskFile("adhoc-no2");
+		expect(delegation).toContain("Task for adhoc-no2");
+		expect(emptyTaskSegment(delegation)).toBe("");
 	});
 });
