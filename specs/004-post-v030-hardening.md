@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Approved — R1/R2/R3 Implemented (v0.3.1 batch), R4/R5 pending |
+| **Status** | Approved — R1/R2/R3/R4 Implemented (v0.3.1 batch), R5 pending |
 | **Target version** | `0.3.1` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack` (unchanged since spec 003) |
@@ -107,7 +107,7 @@ R3b asserting the friendly error.
   (one-shot consume + 2nd-turn no re-inject), which the mock-pi unit
   harness cannot prove.
 
-**Status**: Planned (separate round after R2/R3 PRs land).
+**Status**: Implemented (e2e-002 `b4b05b4`, e2e-003 `3cb4372`).
 
 ### R5 — Documentation updates (mostly landed)
 
@@ -150,7 +150,7 @@ table when they need action tracking.
 - [ ] R1: handler-level tests lock name-only empty-task dispatch (pane + bg).
 - [ ] R2: timeout errors carry holder info; backoff in place; suite green.
 - [ ] R3: hook params typed; friendly ENOENT; suite green.
-- [ ] R4: e2e-002 and e2e-003 pass against the installed package.
+- [x] R4: e2e-002 and e2e-003 pass against the installed package.
 - [ ] Spec 004 archived with Status Implemented at v0.3.1; README index updated.
 
 ## 6. Revision history
