@@ -146,6 +146,14 @@ describe("subagent tool inject (spec 003 PR 12)", () => {
 		});
 	});
 
+	test("inject file source missing → friendly ENOENT error (not raw throw)", async () => {
+		const { execute } = captureSubagentTool();
+		await expect(
+			execute("10", { inject: { name: "e", mode: "replace", sources: [{ kind: "file", value: join(rootTmp, "nope.md") }] } }, undefined, undefined, toolCtx()),
+		).rejects.toThrow(/inject: file source .*not found/);
+		expect(existsSync(injectStatePathFor(runtimeRoot, "e"))).toBe(false);
+	});
+
 	test("inject rollback 1 writes restored prior to state", async () => {
 		const histFile = promptHistoryPathFor(runtimeRoot, "toolRoll");
 		mkdirSync(join(runtimeRoot, "prompt-history"), { recursive: true });
