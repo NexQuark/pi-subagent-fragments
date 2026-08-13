@@ -196,6 +196,32 @@ npm uninstall -g @nexquark/pi-subagent-fragments
 For local development from this repo (no `npm publish` round-trip
 required), use `pi install --path .` from the repo root.
 
+### Local tarball install (per-minor-version house rule)
+
+This package is **not published to the npm registry**; every completed
+minor version is installed on this machine directly from a locally
+packed tarball. This is the routine way the running Pi picks up a new
+minor version (`npm publish` is never used).
+
+```bash
+cd /home/openatom/codes/repos/pi-subagent-fragments
+npm pack                      # → nexquark-pi-subagent-fragments-<ver>.tgz
+npm install -g --allow-scripts=@nexquark/pi-subagent-fragments ./nexquark-pi-subagent-fragments-<ver>.tgz
+```
+
+The `--allow-scripts` flag is required on npm ≥ 10.4 (install-scripts
+gate); it lets the package's `postinstall` (`append-system.mjs install`)
+refresh `~/.pi/agent/APPEND_SYSTEM.md`. If it was skipped, run it once
+manually from the global package dir:
+
+```bash
+cd "$(npm root -g)/@nexquark/pi-subagent-fragments" && node scripts/append-system.mjs install
+```
+
+`settings.json` keeps the `npm:@nexquark/pi-subagent-fragments` entry
+unchanged — the `npm:` prefix resolves to the freshly installed global
+package. **Restart Pi** for the new version to load.
+
 ## Known limitations (v1)
 
 Inherited from upstream `pi-agents-tmux`'s `loadAgentsFromDir`, which reads
