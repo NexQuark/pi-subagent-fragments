@@ -9,6 +9,7 @@ import { runSingleAgent } from "./runner.js";
 import { formatTraceView, recordTraceRef, resolveTraceRecord } from "./renderers.js";
 import { pollPaneCompletions, readPaneRegistry, readTaskRegistry, emitSubagentEvent } from "./tasks.js";
 import { runtimeSessionId, sessionRuntimeDir } from "./settings.js";
+import { assertInstanceCap } from "./instance-cap.js";
 import { writeInjectionState } from "./prompt-inject.js";
 import { PromptHistory, promptHistoryPathFor } from "./prompt-history.js";
 import type { SingleResult, SubagentDashboardItem, SubagentDetails } from "./types.js";
@@ -69,6 +70,12 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 					const before = beforeRegistry[agent.name];
 					const hadLivePane = Boolean(before && (await paneExists(before.paneId)));
 					const hadSavedSessionFlag = hasSavedPaneSession(runtimeRoot, agent.name);
+					// spec 004 R6 — running instance cap. Reusing a live pane (plain
+					// /agents:start) does not create a new instance, so skip the guard
+					// for that case; any launch that creates/forces a fresh instance is
+					// capped (both the discovered and ad-hoc paths).
+					const isPureReuse = hadLivePane && command !== "new" && !forceNewPane;
+					if (!isPureReuse) await assertInstanceCap(runtimeRoot, ctx.cwd);
 					if (command === "new" || forceNewPane) {
 						if (hadLivePane) await stopPersistentPane(runtimeRoot, agent.name);
 						removeDashboardAgent(agent.name);
@@ -120,6 +127,9 @@ export function registerAgentsCommands(deps: AgentsCommandDeps): void {
 							await resetPersistentPaneSession(runtimeRoot, name);
 						}
 					}
+					// spec 004 R6 — running instance cap (ad-hoc always creates a new
+					// instance in either lane; no reuse shortcut).
+					await assertInstanceCap(runtimeRoot, ctx.cwd);
 					const agent = await synthesizeAdhocAgent({
 						name,
 						cwd: parsed.cwd ?? ctx.cwd,

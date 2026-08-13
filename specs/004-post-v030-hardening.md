@@ -141,7 +141,7 @@ excludes stopped/dead instances, config override (`0` = unlimited / N
 applies), friendly error text carries count + remediation; management ops
 unblocked at cap.
 
-**Status**: Planned (user-confirmed design; TDD assign).
+**Status**: Implemented (red `cc23a0b`, green `c4193f4` on `feat/instance-cap`).
 
 ### R5 — Documentation updates (mostly landed)
 
@@ -185,7 +185,7 @@ table when they need action tracking.
 - [ ] R2: timeout errors carry holder info; backoff in place; suite green.
 - [ ] R3: hook params typed; friendly ENOENT; suite green.
 - [x] R4: e2e-002 and e2e-003 pass against the installed package.
-- [ ] R6: new/start blocked over instance cap (both lanes) with friendly error; config override; management ops unblocked.
+- [x] R6: new/start blocked over instance cap (both lanes) with friendly error; config override; management ops unblocked.
 - [ ] Spec 004 archived with Status Implemented at v0.3.1; README index updated.
 
 ## 6. Revision history
