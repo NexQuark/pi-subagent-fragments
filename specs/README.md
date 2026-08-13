@@ -11,6 +11,7 @@ PRs.
 | 001 | Multi-prompt fragment injection (static, spawn-time) | Implemented | `feature/fragments` (v0.1.0) |
 | 002 | Ad-hoc pane agent launch + call-time prompt assembly | Implemented | PR 6-9 (v0.2.0) — archived |
 | 003 | Runtime prompt injection (`/agents:inject` + `subagent.inject`) | Implemented | PR 10-13 (v0.3.0) — archived |
+| 004 | Post-v0.3.0 hardening batch (v0.3.1): name-only ad-hoc contract, file-lock diagnostics, inject typing + ENOENT, e2e 002/003 | Draft | — |
 
 ## Status legend
 
