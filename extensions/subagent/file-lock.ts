@@ -17,17 +17,47 @@ let fileLockOptionsForTests: LockOptions | undefined;
 export class FileLockTimeoutError extends Error {
 	readonly filePath: string;
 	readonly timeoutMs: number;
+	readonly holder?: string;
 
-	constructor(filePath: string, timeoutMs: number) {
-		super(`Timed out acquiring file lock for ${filePath} after ${timeoutMs}ms`);
+	constructor(filePath: string, timeoutMs: number, holder?: string) {
+		super(`Timed out acquiring file lock for ${filePath} after ${timeoutMs}ms${holder ? ` (${holder})` : ""}`);
 		this.name = "FileLockTimeoutError";
 		this.filePath = filePath;
 		this.timeoutMs = timeoutMs;
+		this.holder = holder;
 	}
 }
 
 export function isFileLockTimeoutError(error: unknown): error is FileLockTimeoutError {
 	return error instanceof FileLockTimeoutError || (error instanceof Error && error.name === "FileLockTimeoutError");
+}
+
+/**
+ * Exponential retry backoff (A1): base `retryMs` doubled per attempt, capped
+ * at `retryMs * maxFactor` (default 32). The caller adds jitter on top.
+ */
+export function backoffDelayMs(attempt: number, retryMs: number, maxFactor: number = 32): number {
+	if (!Number.isFinite(retryMs) || retryMs <= 0) return 1;
+	const factor = Math.min(maxFactor, Math.pow(2, Math.max(0, Math.floor(attempt))));
+	return retryMs * factor;
+}
+
+async function readLockHolder(lockDir: string): Promise<string | undefined> {
+	try {
+		const owner = JSON.parse(await fs.promises.readFile(path.join(lockDir, "owner.json"), "utf8")) as {
+			pid?: unknown;
+			host?: unknown;
+			acquiredAt?: unknown;
+		};
+		const pid = owner.pid;
+		if (pid === undefined || pid === null || pid === "") return undefined;
+		const host = typeof owner.host === "string" && owner.host.length > 0 ? owner.host : "<unknown>";
+		const acquiredAt = typeof owner.acquiredAt === "number" ? owner.acquiredAt : undefined;
+		const since = acquiredAt === undefined ? "" : ` since ${acquiredAt}`;
+		return `held by pid ${pid} on ${host}${since}`;
+	} catch {
+		return undefined;
+	}
 }
 
 export function setFileLockOptionsForTests(opts?: LockOptions): void {
@@ -92,6 +122,7 @@ export async function acquireFileLock(filePath: string, opts: LockOptions = {}):
 	const retryMs = opts.retryMs ?? DEFAULT_RETRY_MS;
 	const timeoutMs = effectiveTimeoutMs(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, staleMs, retryMs);
 	const start = Date.now();
+	let attempt = 0;
 	let touchTimer: ReturnType<typeof setInterval> | undefined;
 
 	while (true) {
@@ -129,10 +160,14 @@ export async function acquireFileLock(filePath: string, opts: LockOptions = {}):
 		if (await clearStaleLock(lockDir, staleMs)) continue;
 
 		if (Date.now() - start > timeoutMs) {
+			const holder = await readLockHolder(lockDir);
+			if (holder) throw new FileLockTimeoutError(filePath, timeoutMs, holder);
 			throw new FileLockTimeoutError(filePath, timeoutMs);
 		}
-		const jitter = randomJitter(retryMs);
-		await new Promise((resolve) => setTimeout(resolve, retryMs + jitter));
+		const base = backoffDelayMs(attempt, retryMs);
+		attempt += 1;
+		const jitter = randomJitter(base);
+		await new Promise((resolve) => setTimeout(resolve, base + jitter));
 	}
 }
 
