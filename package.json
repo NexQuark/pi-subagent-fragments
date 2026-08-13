@@ -35,7 +35,6 @@
     "extensions/subagent/*.js",
     "extensions/subagent/names.ts",
     "extensions/subagent/browser/*.ts",
-    "instructions.md",
     "skills/",
     "README.md",
     "CHANGELOG.md",
@@ -168,7 +167,7 @@
         {
           "key": "dashboardShortcut",
           "label": "Dashboard display shortcut",
-          "description": "Keyboard shortcut that cycles the agent dashboard through compact → normal → expanded → hidden, then restores the last visible mode. Use none to disable.",
+          "description": "Keyboard shortcut that cycles the agent dashboard through compact \u2192 normal \u2192 expanded \u2192 hidden, then restores the last visible mode. Use none to disable.",
           "type": "string",
           "default": "alt+a",
           "category": "Keyboard",
