@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Approved (user decision 2026-08-13) |
+| **Status** | Approved — R1/R2/R3 Implemented (TDD via sub-tmux), R4 (docs) pending |
 | **Target version** | `0.4.0` |
 | **Scope** | This fork only (`@nexquark/pi-subagent-fragments`) |
 | **Upstream base** | `vanillagreencom/vstack` (unchanged since spec 004) |
@@ -95,15 +95,15 @@ text.
 
 ## 3. Acceptance criteria
 
-- [ ] R1: each registered tool carries promptSnippet + curated
+- [x] R1: each registered tool carries promptSnippet + curated
       promptGuidelines; guidelines appear in the assembled system prompt
       when the tool is active (unit test on buildSystemPrompt-equivalent
       composition, or the extension's own prompt assembly test).
-- [ ] R2: package.json has no `pi.appendSystem`; postinstall/preuninstall
+- [x] R2: package.json has no `pi.appendSystem`; postinstall/preuninstall
       no longer reference append-system; the local
       `~/.pi/agent/APPEND_SYSTEM.md` block is removed; fresh-install
       verification shows no write.
-- [ ] R3: skill ships in the package tarball, is NOT auto-installed, and
+- [x] R3: skill ships in the package tarball, is NOT auto-installed, and
       README documents install/use.
 - [ ] R4: README/DEVELOPMENT updated; suite green.
 

@@ -70,6 +70,11 @@ export function registerPaneSupportTools(deps: PaneSupportToolDeps): void {
 		renderShell: "self",
 		name: "get_subagent_result",
 		label: "Get Agent Result",
+		promptSnippet: "Retrieve the status/result of a persistent-pane agent task by taskId or agent.",
+		promptGuidelines: [
+			"This is a recovery/status tool for pane tasks; it does not change orchestration ownership.",
+			"Prefer letting the completion follow-up wake you over blocking with wait:true, unless the user asked.",
+		],
 		description: "Retrieve status/results for persistent pane agent tasks by taskId or latest agent task. Use waitFor: \"idle\" to wait for pane isIdle transition without shell polling. This is a recovery/status tool for pane tasks and does not change orchestration ownership.",
 		parameters: GetSubagentResultParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -154,6 +159,10 @@ export function registerPaneSupportTools(deps: PaneSupportToolDeps): void {
 		renderShell: "self",
 		name: "wait_for_subagent_idle",
 		label: "Wait Agent Idle",
+		promptSnippet: "Wait for a persistent-pane agent's bridge state to become idle.",
+		promptGuidelines: [
+			"Use this instead of polling pi-bridge state in shell loops; it distinguishes idle-after-busy from never-busy.",
+		],
 		description: "Wait for a persistent pane agent's pi-bridge state to transition to isIdle=true. Use this instead of polling pi-bridge state in shell loops.",
 		parameters: WaitForSubagentIdleParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -179,6 +188,11 @@ export function registerPaneSupportTools(deps: PaneSupportToolDeps): void {
 		renderShell: "self",
 		name: "steer_subagent",
 		label: "Steer Agent",
+		promptSnippet: "Send a steering message to a running persistent-pane agent.",
+		promptGuidelines: [
+			"Steering targets a live persistent-pane agent under this session's runtime; otherwise an inbox fallback is queued.",
+			"Steering is an interruption — send concise, actionable direction, not a full new task.",
+		],
 		description: "Send a steering message to a persistent pane agent via pi-session-bridge. Bridge targeting requires the agent's child session to live under this parent session's runtime; otherwise an inbox-file fallback is queued instead.",
 		parameters: SteerSubagentParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -356,6 +370,11 @@ export function registerPaneSupportTools(deps: PaneSupportToolDeps): void {
 		renderShell: "self",
 		name: "stop_subagent",
 		label: "Stop Agent",
+		promptSnippet: "Stop a persistent-pane agent, killing its pane and marking active tasks blocked.",
+		promptGuidelines: [
+			"Stopping kills the pane but preserves the session file; the next default subagent/start resumes it.",
+			"Use forceSpawn only when you want a fresh session.",
+		],
 		description: "Stop a persistent pane agent, kill its tmux pane, remove it from the live pane registry/dashboard, and mark any non-terminal active task as blocked. The pane session file is preserved; a later subagent call or /agents start resumes it unless forceSpawn or /agents new is used.",
 		parameters: StopSubagentParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

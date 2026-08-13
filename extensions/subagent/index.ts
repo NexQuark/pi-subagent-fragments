@@ -1214,6 +1214,11 @@ export default function (pi: ExtensionAPI) {
 		renderShell: "self",
 		name: "complete_subagent",
 		label: "Complete Agent Task",
+		promptSnippet: "Child-pane-only helper that writes your completion record (status + summary) without outbox JSON mechanics.",
+		promptGuidelines: [
+			"Only available inside a persistent agent pane; do not call it before the work is actually done.",
+			"Provide a 1-3 sentence summary plus filesChanged/validation (empty if none), then go idle.",
+		],
 		description: "Child-pane-only helper that writes the persistent agent completion record without exposing outbox JSON mechanics in the visible pane.",
 		parameters: CompleteSubagentParams,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -1833,6 +1838,13 @@ export default function (pi: ExtensionAPI) {
 		renderShell: "self",
 		name: "delegate_subagent",
 		label: "Delegate",
+		promptSnippet: "Restricted child-only delegation — spawn ONE sub-agent for reconnaissance/research and get a summary.",
+		promptGuidelines: [
+			"Only callable from a child agent process; the target must be listed in the caller agent's allowed-subagents frontmatter.",
+			"Single dispatch only — no parallel tasks, no chain, no session reuse, no pane targets.",
+			"Include every fact and constraint in the task; the parent conversation is not shared.",
+			"Use for context-protecting reconnaissance; read exact files yourself before editing.",
+		],
 		description: [
 			"Restricted exploratory delegation. Spawn a single child agent in its own context window and return its summary.",
 			"Only callable from a child Pi process whose PI_SUBAGENT_CHILD_AGENT is set; targets must appear in the caller agent's `allowed-subagents` frontmatter.",
@@ -1958,6 +1970,15 @@ export default function (pi: ExtensionAPI) {
 		renderShell: "self",
 		name: "subagent",
 		label: "Agent",
+		promptSnippet: "Delegate work to a sub-agent (single / parallel / chain) in an isolated context and get a result summary.",
+		promptGuidelines: [
+			"Use one self-contained task string per delegation — the sub-agent cannot ask follow-ups.",
+			"Use for isolated context, specialist review, or parallel reconnaissance; do NOT use for trivial work you can do directly with read/grep/find.",
+			"A persistent-pane dispatch returns a taskId immediately — end your turn after dispatching; the completion wakes you in a new turn.",
+			"Do not call get_subagent_result with wait:true to block unless the user asked; let the follow-up wake you.",
+			"Pass sessionKey only to intentionally reuse memory across calls; omit for a fresh one-shot lane.",
+			"Parallel/chain calls run through a worker pool — do not split them manually.",
+		],
 		description: [
 			"Delegate tasks to specialized agents with isolated context.",
 			"Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",

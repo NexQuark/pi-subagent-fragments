@@ -18,14 +18,11 @@
       "./extensions/subagent/index.ts"
     ],
     "image": "https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-agents-tmux/assets/agents-tmux-demo.gif",
-    "video": "https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-agents-tmux/assets/agents-tmux-demo.mp4",
-    "appendSystem": "./instructions.md"
+    "video": "https://raw.githubusercontent.com/vanillagreencom/vstack/main/pi-extensions/pi-agents-tmux/assets/agents-tmux-demo.mp4"
   },
   "scripts": {
     "test": "bun test ./tests ./extensions/subagent/__tests__",
-    "smoke": "NODE_PATH=\"$(pwd)/smoke/local_node_modules\" bun smoke/smoke-v020.mjs && NODE_PATH=\"$(pwd)/smoke/local_node_modules\" bun smoke/smoke-v030.mjs",
-    "postinstall": "node scripts/append-system.mjs install",
-    "preuninstall": "node scripts/append-system.mjs remove"
+    "smoke": "NODE_PATH=\"$(pwd)/smoke/local_node_modules\" bun smoke/smoke-v020.mjs && NODE_PATH=\"$(pwd)/smoke/local_node_modules\" bun smoke/smoke-v030.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -38,8 +35,8 @@
     "extensions/subagent/*.js",
     "extensions/subagent/names.ts",
     "extensions/subagent/browser/*.ts",
-    "scripts/",
     "instructions.md",
+    "skills/",
     "README.md",
     "CHANGELOG.md",
     "UPSTREAM.md",
