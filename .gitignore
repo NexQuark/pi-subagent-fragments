@@ -5,5 +5,9 @@ bun.lock
 # but bun needs NODE_PATH help to resolve them outside the pi runtime).
 e2e/local_node_modules/
 
-# npm pack output (rebuild via \`npm pack\` when needed).
+# npm pack output (rebuild via `npm pack` when needed).
 nexquark-pi-subagent-fragments-*.tgz
+
+# sub-meta coordination state — charter §1.3 declares these gitignored.
+# Holds per-spec bootstrap.yaml, dispatch/verdict/tdd logs, lessons, current-task.
+.ai-state/
