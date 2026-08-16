@@ -13,6 +13,7 @@ PRs.
 | 003 | Runtime prompt injection (`/agents:inject` + `subagent.inject`) | Implemented | PR 10-13 (v0.3.0) — archived |
 | 004 | Post-v0.3.0 hardening batch (v0.3.1): name-only ad-hoc contract, file-lock diagnostics, inject typing + ENOENT, e2e 002/003, instance cap | Implemented | A3/A1/R1/R4/R6 (v0.3.1) — archived |
 | 005 | Structured tool prompting — retire APPEND_SYSTEM.md; tool rules → promptSnippet/promptGuidelines; optional skill | Implemented | feat/tool-prompting (v0.4.0) — archived |
+| charter-v2 | Charter v2 amendment candidates (5 items: `tests/__contracts__` ownership, hotfix path, smoke discipline, lessons schema, status state-machine) | Draft | `specs/_charter-v2-candidates.md` (awaiting `_charter-3.md` review round) |
 
 ## Status legend
 
