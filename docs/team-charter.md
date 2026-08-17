@@ -142,6 +142,9 @@ Constraints:
 | `tests/__contracts__/00X.md` | `sub-tmux` | Acceptance ↔ test matrix. sub-tmux adds rows when the spec is Approved (`[dev] spec <id> contract matrix ready`) and flips `red` → `green` per TDD cycle. sub-meta reads only (via `.ai-state/tdd-log.jsonl`). |
 | `hotfix/v<N.M.P>` branches | `review-subagent-tmux` | Created when smoke gate fails (`§ 5 step 6.7.1`); sub-tmux commits fixes but does not create the branch. |
 | `.ai-state/` | `sub-meta` | Coordination state (gitignored). sub-meta writes; sub-tmux and reviewer read for context. |
+| `smoke/smoke-v<N.M.P>.mjs` | `sub-tmux` | Per-release smoke script. Sub-tmux writes the script that exercises the new release surface; sub-meta runs it (per `§ 5 step 8`) and emits the three-state report. Required per release (F-004-1). |
+| `smoke/fixtures/` | `sub-tmux` | Smoke test fixtures (e.g. agent + fragment markdown files referenced by smoke scripts). Tracked. |
+| `smoke/local_node_modules/` | — (gitignored) | Peer-dep symlink farm that smoke scripts use to resolve pi packages outside the pi runtime. |
 | `tests/*.test.ts` | `sub-tmux` | TDD tests (red, then green) |
 | `extensions/subagent/*.ts` | `sub-tmux` | Implementation |
 | `CHANGELOG.md` | `review-subagent-tmux` | Release notes |
