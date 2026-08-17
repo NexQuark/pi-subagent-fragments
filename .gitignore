@@ -11,3 +11,11 @@ nexquark-pi-subagent-fragments-*.tgz
 # sub-meta coordination state — charter §1.3 declares these gitignored.
 # Holds per-spec bootstrap.yaml, dispatch/verdict/tdd logs, lessons, current-task.
 .ai-state/
+
+# glla runtime session state (active.jsonl + archive/) — not source.
+.pi-glla/
+
+# Smoke test fixtures + vendor resolution (peer-dep symlink farm). v0.3.0+ smoke
+# scripts vendor pi packages here because bun needs NODE_PATH help to resolve them
+# outside the pi runtime. Same rationale as e2e/local_node_modules above.
+smoke/local_node_modules/
